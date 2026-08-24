@@ -34,11 +34,22 @@ ordering and tick spacing, pool factory identity, the factory's pool lookup and 
 factory identity. The registry contract version also pins the one typed
 `exactInputSingle` ABI selector. The candidate manifest separately pins the quoter, pool
 implementation, fee module and explicit-block fee and observation snapshots through two
-independent RPCs. Mutable snapshots are evidence, not contract guarantees.
+independent RPCs. Manifest schema v2 also pins one Chainlink Standard proxy per supported
+asset, the shared proxy bytecode, description, decimals, version, underlying aggregator and
+complete round at that same block. Catalog heartbeat and round state are evidence, not a
+frozen maximum-age policy or contract guarantee. Before deployment, the registry must move
+shared target-token and price-reference identity into one asset record referenced by its
+markets.
 
-Launch policy selects one candidate market using the expected operation size before vault
-creation. Vault creation binds that market permanently; simulation and live execution do not
-reselect a pool per operation. No checked-in registry is active yet.
+Only the proxy address and runtime code hash are chain-immutable identity. Feed description,
+decimals and version are frozen registry policy: any change fails verification and requires
+manual review even when it follows an ordinary underlying-aggregator rotation. The
+aggregator address, code hash, type and round remain mutable explicit-block evidence.
+
+Launch policy quotes the exact entry and immediate reverse leg at the immutable route
+notional ceiling, then selects one candidate market before vault creation. Vault creation
+binds that market permanently; simulation and live execution do not reselect a pool per
+operation. No checked-in registry is active yet.
 
 There is never a generic `execute(bytes)` path. Aerodrome calls use a typed interface to one
 registry-approved router and pool. A router ABI change requires a new vault version.

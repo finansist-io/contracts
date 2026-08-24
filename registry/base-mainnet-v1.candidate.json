@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "status": "candidate",
   "marketCount": 5,
   "registryId": "base-mainnet-v1",
@@ -10,10 +10,30 @@
     "hash": "0x27edac8e7e6904aa7d05827d21be7480a2631af9f21ba77c0aac4e54e1b5bb40",
     "timestamp": "2026-08-14T19:55:47.000Z"
   },
-  "source": {
-    "repository": "https://github.com/aerodrome-finance/slipstream",
-    "commit": "f8717faaae6e6717db3c8e3850149c01a79c0603"
+  "sources": {
+    "aerodrome": {
+      "repository": "https://github.com/aerodrome-finance/slipstream",
+      "commit": "f8717faaae6e6717db3c8e3850149c01a79c0603"
+    },
+    "chainlink": {
+      "directoryUrl": "https://reference-data-directory.vercel.app/feeds-ethereum-mainnet-base-1.json",
+      "directorySha256": "99243a640d2334071c5bc89429328c6d21902d757d24aeb6826fd81cb42136e8",
+      "networkMappingRepository": "https://github.com/smartcontractkit/documentation",
+      "networkMappingCommit": "ec8386ebfde1b16c9aed3e0bb76b214dd2afe82c",
+      "networkMappingPath": "src/features/data/chains.ts",
+      "variant": "standard"
+    }
   },
+  "verificationProviders": [
+    {
+      "id": "blastapi-base-public",
+      "operator": "BlastAPI"
+    },
+    {
+      "id": "tenderly-base-public",
+      "operator": "Tenderly"
+    }
+  ],
   "selectors": {
     "exactInputSingle": "0xa026383e",
     "quoteExactInputSingle": "0x9e7defe6"
@@ -43,6 +63,128 @@
       "address": "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
       "decimals": 6,
       "codeHash": "0xdc7d03167b2b33566fa1cf50046e5bf4828f6d401678ed832d2cd7973ea17380"
+    }
+  },
+  "priceFeeds": {
+    "USDC": {
+      "catalogPath": "usdc-usd",
+      "catalogHeartbeatSeconds": 86400,
+      "proxy": {
+        "address": "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B",
+        "codeHash": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2"
+      },
+      "description": "USDC / USD",
+      "descriptionHash": "0xb45d52f2002a2abc1f204eb800af7cbf074250de1f754f35254efca06f7b3256",
+      "decimals": 8,
+      "version": 6,
+      "mutableSnapshot": {
+        "aggregator": {
+          "address": "0xE2F30AF46DddDdb7795995d615C828F722E2e6F0",
+          "codeHash": "0x16f41184f797cb8f8918680df0ebf2a97cc3192aa6b104615f61096fc674f2aa",
+          "typeAndVersion": "AccessControlledOCR2Aggregator 1.0.0"
+        },
+        "roundId": "36893488147419103355",
+        "answer": "99987455",
+        "startedAtUnixSeconds": "1786718058",
+        "updatedAtUnixSeconds": "1786718071",
+        "answeredInRound": "36893488147419103355"
+      }
+    },
+    "cbBTC": {
+      "catalogPath": "cbbtc-usd",
+      "catalogHeartbeatSeconds": 1200,
+      "proxy": {
+        "address": "0x07DA0E54543a844a80ABE69c8A12F22B3aA59f9D",
+        "codeHash": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2"
+      },
+      "description": "cbBTC / USD",
+      "descriptionHash": "0x85432b224d387dc8935b88699257746efe34d45987ac5dc1f0990750c2b48401",
+      "decimals": 8,
+      "version": 6,
+      "mutableSnapshot": {
+        "aggregator": {
+          "address": "0x51cE3091Cf646587E02Cad83b580992f8723e718",
+          "codeHash": "0x16f41184f797cb8f8918680df0ebf2a97cc3192aa6b104615f61096fc674f2aa",
+          "typeAndVersion": "AccessControlledOCR2Aggregator 1.0.0"
+        },
+        "roundId": "36893488147419115476",
+        "answer": "6287175751889",
+        "startedAtUnixSeconds": "1786736411",
+        "updatedAtUnixSeconds": "1786736425",
+        "answeredInRound": "36893488147419115476"
+      }
+    },
+    "WETH": {
+      "catalogPath": "eth-usd",
+      "catalogHeartbeatSeconds": 1200,
+      "proxy": {
+        "address": "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70",
+        "codeHash": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2"
+      },
+      "description": "ETH / USD",
+      "descriptionHash": "0x62ddc8c5ffbd077b5a28e92efd10abcc58e66fb2a326401f0efd02e173ac1777",
+      "decimals": 8,
+      "version": 6,
+      "mutableSnapshot": {
+        "aggregator": {
+          "address": "0x1e0B2C3896338FBb201C4f0A27C6904801Dca06B",
+          "codeHash": "0x16f41184f797cb8f8918680df0ebf2a97cc3192aa6b104615f61096fc674f2aa",
+          "typeAndVersion": "AccessControlledOCR2Aggregator 1.0.0"
+        },
+        "roundId": "36893488147419129833",
+        "answer": "187729379769",
+        "startedAtUnixSeconds": "1786736581",
+        "updatedAtUnixSeconds": "1786736595",
+        "answeredInRound": "36893488147419129833"
+      }
+    },
+    "AERO": {
+      "catalogPath": "aero-usd",
+      "catalogHeartbeatSeconds": 86400,
+      "proxy": {
+        "address": "0x4EC5970fC728C5f65ba413992CD5fF6FD70fcfF0",
+        "codeHash": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2"
+      },
+      "description": "AERO / USD",
+      "descriptionHash": "0xf77d5c872ac2f53a56d1857c5681e02ec526c0794d7b4f4f7ddaeb848e86b488",
+      "decimals": 8,
+      "version": 6,
+      "mutableSnapshot": {
+        "aggregator": {
+          "address": "0xFCDdfb2294beBa43987516371fEBb2E677EB403e",
+          "codeHash": "0x16f41184f797cb8f8918680df0ebf2a97cc3192aa6b104615f61096fc674f2aa",
+          "typeAndVersion": "AccessControlledOCR2Aggregator 1.0.0"
+        },
+        "roundId": "36893488147419110827",
+        "answer": "40008659",
+        "startedAtUnixSeconds": "1786727456",
+        "updatedAtUnixSeconds": "1786727469",
+        "answeredInRound": "36893488147419110827"
+      }
+    },
+    "EURC": {
+      "catalogPath": "eurc-usd",
+      "catalogHeartbeatSeconds": 86400,
+      "proxy": {
+        "address": "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250",
+        "codeHash": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2"
+      },
+      "description": "EURC / USD",
+      "descriptionHash": "0x69f6bf8b94546254eac13c1430cdb426d41d002aeb97bd981ce56b67a3686e11",
+      "decimals": 8,
+      "version": 6,
+      "mutableSnapshot": {
+        "aggregator": {
+          "address": "0x9b3d0cCdeD2343CF7FfbAEC5a7ed1DB00B09F996",
+          "codeHash": "0x16f41184f797cb8f8918680df0ebf2a97cc3192aa6b104615f61096fc674f2aa",
+          "typeAndVersion": "AccessControlledOCR2Aggregator 1.0.0"
+        },
+        "roundId": "36893488147419103391",
+        "answer": "115618447",
+        "startedAtUnixSeconds": "1786707500",
+        "updatedAtUnixSeconds": "1786707513",
+        "answeredInRound": "36893488147419103391"
+      }
     }
   },
   "deployments": {

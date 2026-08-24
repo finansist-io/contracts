@@ -14,16 +14,21 @@ const QUOTE_EXACT_INPUT_SINGLE_SELECTOR = functionSelector(
 );
 
 const selectors = {
+  aggregator: functionSelector("aggregator()"),
   decimals: functionSelector("decimals()"),
+  description: functionSelector("description()"),
   factory: functionSelector("factory()"),
   fee: functionSelector("fee()"),
   getPool: functionSelector("getPool(address,address,int24)"),
+  latestRoundData: functionSelector("latestRoundData()"),
   poolImplementation: functionSelector("poolImplementation()"),
   slot0: functionSelector("slot0()"),
   swapFeeModule: functionSelector("swapFeeModule()"),
   tickSpacing: functionSelector("tickSpacing()"),
   token0: functionSelector("token0()"),
-  token1: functionSelector("token1()")
+  token1: functionSelector("token1()"),
+  typeAndVersion: functionSelector("typeAndVersion()"),
+  version: functionSelector("version()")
 };
 
 function invariant(condition, message) {
@@ -63,6 +68,50 @@ function decodeAddress(value) {
 function decodeUint(value) {
   invariant(/^0x[0-9a-fA-F]{64}$/.test(value), `invalid integer result: ${value}`);
   return Number(BigInt(value));
+}
+
+function decodeString(value) {
+  const normalized = normalizeHex(value);
+  const words = normalized.slice(2).match(/.{64}/g) ?? [];
+  invariant(words.length >= 2, `invalid string result: ${value}`);
+  const offset = Number(BigInt(`0x${words[0]}`));
+  invariant(Number.isSafeInteger(offset) && offset % 32 === 0, `invalid string offset: ${value}`);
+  const lengthWord = 2 + offset * 2;
+  invariant(normalized.length >= lengthWord + 64, `invalid string length word: ${value}`);
+  const length = Number(BigInt(`0x${normalized.slice(lengthWord, lengthWord + 64)}`));
+  const textStart = lengthWord + 64;
+  const textEnd = textStart + length * 2;
+  invariant(Number.isSafeInteger(length) && normalized.length >= textEnd, `invalid string bytes: ${value}`);
+  return Buffer.from(normalized.slice(textStart, textEnd), "hex").toString("utf8");
+}
+
+function decodeSignedWord(word) {
+  const raw = BigInt(`0x${word}`);
+  const signBit = BigInt(1) << BigInt(255);
+  return (raw >= signBit ? raw - (BigInt(1) << BigInt(256)) : raw).toString();
+}
+
+function decodeRoundData(value) {
+  const normalized = normalizeHex(value);
+  const words = normalized.slice(2).match(/.{64}/g) ?? [];
+  invariant(words.length === 5, `invalid round result: ${value}`);
+  return {
+    roundId: BigInt(`0x${words[0]}`).toString(),
+    answer: decodeSignedWord(words[1]),
+    startedAtUnixSeconds: BigInt(`0x${words[2]}`).toString(),
+    updatedAtUnixSeconds: BigInt(`0x${words[3]}`).toString(),
+    answeredInRound: BigInt(`0x${words[4]}`).toString()
+  };
+}
+
+function canonicalUint(value, label) {
+  invariant(typeof value === "string" && /^(?:0|[1-9][0-9]*)$/.test(value), `invalid ${label}`);
+  return BigInt(value);
+}
+
+function canonicalInt(value, label) {
+  invariant(typeof value === "string" && /^(?:0|-?[1-9][0-9]*)$/.test(value), `invalid ${label}`);
+  return BigInt(value);
 }
 
 function decodeSlot0(value) {
@@ -111,7 +160,7 @@ function firstDifference(expected, actual, path = "snapshot") {
 }
 
 export function validateManifest(manifest) {
-  invariant(manifest.schemaVersion === 1, "unsupported manifest schema");
+  invariant(manifest.schemaVersion === 2, "unsupported manifest schema");
   invariant(manifest.status === "candidate", "only candidate manifests can be verified");
   invariant(textHash(manifest.registryId) === normalizeHash(manifest.registryIdHash), "wrong registry id hash");
   invariant(Number.isSafeInteger(manifest.chainId) && manifest.chainId > 0, "invalid chain id");
@@ -124,15 +173,66 @@ export function validateManifest(manifest) {
     "wrong quoter selector"
   );
   invariant(Object.keys(manifest.tokens ?? {}).length > 0, "tokens are required");
+  invariant(Object.keys(manifest.priceFeeds ?? {}).length > 0, "price feeds are required");
   invariant(Object.keys(manifest.deployments ?? {}).length > 0, "deployments are required");
   invariant(Array.isArray(manifest.markets) && manifest.markets.length > 0, "markets are required");
   invariant(manifest.marketCount === manifest.markets.length, "wrong market count");
+  invariant(
+    /^[0-9a-f]{64}$/.test(manifest.sources?.chainlink?.directorySha256 ?? ""),
+    "invalid Chainlink directory hash"
+  );
+  invariant(manifest.sources?.chainlink?.variant === "standard", "only Chainlink standard feeds are supported");
+  invariant(Array.isArray(manifest.verificationProviders) && manifest.verificationProviders.length === 2, "two providers required");
+  for (const provider of manifest.verificationProviders) {
+    invariant(/^[a-z0-9-]+$/.test(provider.id), "invalid verification provider id");
+    invariant(typeof provider.operator === "string" && provider.operator.length > 0, "invalid verification provider operator");
+  }
+  invariant(
+    new Set(manifest.verificationProviders.map((provider) => provider.id)).size === 2
+      && new Set(manifest.verificationProviders.map((provider) => provider.operator)).size === 2,
+    "verification providers must be independent"
+  );
 
   for (const [symbol, token] of Object.entries(manifest.tokens)) {
     invariant(symbol.length > 0, "empty token symbol");
     normalizeAddress(token.address);
     normalizeHash(token.codeHash);
     invariant(Number.isInteger(token.decimals) && token.decimals >= 0 && token.decimals <= 255, "invalid decimals");
+  }
+
+  const tokenSymbols = Object.keys(manifest.tokens).sort();
+  const feedSymbols = Object.keys(manifest.priceFeeds).sort();
+  invariant(
+    tokenSymbols.length === feedSymbols.length && tokenSymbols.every((symbol, index) => symbol === feedSymbols[index]),
+    "every token requires exactly one price feed"
+  );
+  const blockTimestamp = BigInt(Math.floor(Date.parse(manifest.verificationBlock.timestamp) / 1000));
+  for (const [symbol, feed] of Object.entries(manifest.priceFeeds)) {
+    invariant(/^[a-z0-9-]+$/.test(feed.catalogPath), `invalid catalog path: ${symbol}`);
+    invariant(
+      Number.isSafeInteger(feed.catalogHeartbeatSeconds) && feed.catalogHeartbeatSeconds > 0,
+      `invalid catalog heartbeat: ${symbol}`
+    );
+    normalizeAddress(feed.proxy.address);
+    normalizeHash(feed.proxy.codeHash);
+    invariant(textHash(feed.description) === normalizeHash(feed.descriptionHash), `wrong description hash: ${symbol}`);
+    invariant(Number.isInteger(feed.decimals) && feed.decimals > 0 && feed.decimals <= 255, `invalid feed decimals: ${symbol}`);
+    invariant(Number.isSafeInteger(feed.version) && feed.version > 0, `invalid feed version: ${symbol}`);
+    normalizeAddress(feed.mutableSnapshot.aggregator.address);
+    normalizeHash(feed.mutableSnapshot.aggregator.codeHash);
+    invariant(feed.mutableSnapshot.aggregator.typeAndVersion.length > 0, `empty aggregator type: ${symbol}`);
+    const roundId = canonicalUint(feed.mutableSnapshot.roundId, `round id: ${symbol}`);
+    const answer = canonicalInt(feed.mutableSnapshot.answer, `round answer: ${symbol}`);
+    const startedAt = canonicalUint(feed.mutableSnapshot.startedAtUnixSeconds, `round start: ${symbol}`);
+    const updatedAt = canonicalUint(feed.mutableSnapshot.updatedAtUnixSeconds, `round update: ${symbol}`);
+    const answeredInRound = canonicalUint(feed.mutableSnapshot.answeredInRound, `answered round: ${symbol}`);
+    invariant(roundId > 0 && answer > 0, `invalid feed round: ${symbol}`);
+    invariant(startedAt > 0 && startedAt <= updatedAt && updatedAt <= blockTimestamp, `invalid feed timestamps: ${symbol}`);
+    invariant(answeredInRound >= roundId, `incomplete feed round: ${symbol}`);
+    invariant(
+      blockTimestamp - updatedAt <= BigInt(feed.catalogHeartbeatSeconds),
+      `feed exceeded catalog heartbeat at verification block: ${symbol}`
+    );
   }
 
   for (const deployment of Object.values(manifest.deployments)) {
@@ -194,6 +294,29 @@ export function expectedSnapshot(manifest) {
       }
     ])
   );
+  const priceFeeds = Object.fromEntries(
+    Object.entries(manifest.priceFeeds).map(([symbol, feed]) => [
+      symbol,
+      {
+        proxy: normalizedComponent(feed.proxy),
+        description: feed.description,
+        descriptionHash: normalizeHash(feed.descriptionHash),
+        decimals: feed.decimals,
+        version: feed.version,
+        mutableSnapshot: {
+          aggregator: {
+            ...normalizedComponent(feed.mutableSnapshot.aggregator),
+            typeAndVersion: feed.mutableSnapshot.aggregator.typeAndVersion
+          },
+          roundId: feed.mutableSnapshot.roundId,
+          answer: feed.mutableSnapshot.answer,
+          startedAtUnixSeconds: feed.mutableSnapshot.startedAtUnixSeconds,
+          updatedAtUnixSeconds: feed.mutableSnapshot.updatedAtUnixSeconds,
+          answeredInRound: feed.mutableSnapshot.answeredInRound
+        }
+      }
+    ])
+  );
   const accountingToken = tokens.USDC;
   invariant(accountingToken, "USDC accounting token is required");
   const markets = Object.fromEntries(
@@ -227,6 +350,7 @@ export function expectedSnapshot(manifest) {
     },
     accountingToken: accountingToken.address,
     tokens,
+    priceFeeds,
     deployments,
     markets
   };
@@ -326,6 +450,27 @@ async function readSnapshot(manifest, rpcUrl, label) {
     };
   }
 
+  const priceFeeds = {};
+  for (const [symbol, feed] of Object.entries(manifest.priceFeeds)) {
+    const proxy = await codeComponent(feed.proxy.address);
+    const aggregatorAddress = decodeAddress(await call(proxy.address, selectors.aggregator));
+    const description = decodeString(await call(proxy.address, selectors.description));
+    priceFeeds[symbol] = {
+      proxy,
+      description,
+      descriptionHash: textHash(description),
+      decimals: decodeUint(await call(proxy.address, selectors.decimals)),
+      version: decodeUint(await call(proxy.address, selectors.version)),
+      mutableSnapshot: {
+        aggregator: {
+          ...(await codeComponent(aggregatorAddress)),
+          typeAndVersion: decodeString(await call(aggregatorAddress, selectors.typeAndVersion))
+        },
+        ...decodeRoundData(await call(proxy.address, selectors.latestRoundData))
+      }
+    };
+  }
+
   const accountingToken = normalizeAddress(manifest.tokens.USDC.address);
   const markets = {};
   for (const market of manifest.markets) {
@@ -363,6 +508,7 @@ async function readSnapshot(manifest, rpcUrl, label) {
     },
     accountingToken,
     tokens,
+    priceFeeds,
     deployments,
     markets
   };
@@ -370,18 +516,23 @@ async function readSnapshot(manifest, rpcUrl, label) {
 
 async function main() {
   const manifestPath = process.argv[2] ?? "registry/base-mainnet-v1.candidate.json";
-  const firstRpc = process.env.MANIFEST_RPC_URL_A;
-  const secondRpc = process.env.MANIFEST_RPC_URL_B;
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  validateManifest(manifest);
+  const providerEnvName = (id) => `MANIFEST_RPC_URL_${id.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+  invariant(Array.isArray(manifest.verificationProviders) && manifest.verificationProviders.length === 2, "two providers required");
+  const [firstProvider, secondProvider] = manifest.verificationProviders;
+  const firstRpc = process.env[providerEnvName(firstProvider.id)];
+  const secondRpc = process.env[providerEnvName(secondProvider.id)];
   invariant(firstRpc && secondRpc && firstRpc !== secondRpc, "two distinct registry RPC URLs are required");
 
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   const [first, second] = await Promise.all([
-    readSnapshot(manifest, firstRpc, "provider A"),
-    readSnapshot(manifest, secondRpc, "provider B")
+    readSnapshot(manifest, firstRpc, firstProvider.id),
+    readSnapshot(manifest, secondRpc, secondProvider.id)
   ]);
   verifyManifestAgainstSnapshots(manifest, first, second);
   console.log(
-    `verified ${manifest.registryId} candidate at block ${manifest.verificationBlock.number} ${manifest.verificationBlock.hash}`
+    `verified ${manifest.registryId} candidate with ${firstProvider.id} + ${secondProvider.id} at block `
+      + `${manifest.verificationBlock.number} ${manifest.verificationBlock.hash}`
   );
 }
 
