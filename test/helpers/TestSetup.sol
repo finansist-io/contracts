@@ -42,7 +42,44 @@ contract FeeToken is ERC20 {
     }
 }
 
-contract MockEndpoint {}
+contract MockSlipstreamFactory {
+    mapping(bytes32 poolKey => address pool) private _pools;
+
+    function setPool(address tokenA, address tokenB, int24 tickSpacing, address pool) external {
+        _pools[_poolKey(tokenA, tokenB, tickSpacing)] = pool;
+        _pools[_poolKey(tokenB, tokenA, tickSpacing)] = pool;
+    }
+
+    function getPool(address tokenA, address tokenB, int24 tickSpacing) external view returns (address) {
+        return _pools[_poolKey(tokenA, tokenB, tickSpacing)];
+    }
+
+    function _poolKey(address tokenA, address tokenB, int24 tickSpacing) private pure returns (bytes32) {
+        return keccak256(abi.encode(tokenA, tokenB, tickSpacing));
+    }
+}
+
+contract MockSlipstreamPool {
+    address public immutable factory;
+    address public immutable token0;
+    address public immutable token1;
+    int24 public immutable tickSpacing;
+
+    constructor(address factory_, address token0_, address token1_, int24 tickSpacing_) {
+        factory = factory_;
+        token0 = token0_;
+        token1 = token1_;
+        tickSpacing = tickSpacing_;
+    }
+}
+
+contract MockSlipstreamRouter {
+    address public immutable factory;
+
+    constructor(address factory_) {
+        factory = factory_;
+    }
+}
 
 abstract contract TestSetup is Test {
     uint256 internal constant BASE_CHAIN_ID = 8453;
@@ -58,10 +95,9 @@ abstract contract TestSetup is Test {
 
     MockToken internal usdc;
     MockToken internal target;
-    MockEndpoint internal poolFactory;
-    MockEndpoint internal pool;
-    MockEndpoint internal router;
-    MockEndpoint internal quoter;
+    MockSlipstreamFactory internal poolFactory;
+    MockSlipstreamPool internal pool;
+    MockSlipstreamRouter internal router;
     EntryGuard internal guard;
     MarketRegistryV1 internal registry;
     VaultFactoryV1 internal vaultFactory;
@@ -71,33 +107,45 @@ abstract contract TestSetup is Test {
         vm.chainId(BASE_CHAIN_ID);
         usdc = new MockToken("USD Coin", "USDC", 6);
         target = new MockToken("Wrapped Ether", "WETH", 18);
-        poolFactory = new MockEndpoint();
-        pool = new MockEndpoint();
-        router = new MockEndpoint();
-        quoter = new MockEndpoint();
+        poolFactory = new MockSlipstreamFactory();
+        (address token0, address token1) = sortedTokens(address(usdc), address(target));
+        pool = new MockSlipstreamPool(address(poolFactory), token0, token1, 100);
+        router = new MockSlipstreamRouter(address(poolFactory));
+        poolFactory.setPool(address(usdc), address(target), 100, address(pool));
         guard = new EntryGuard(guardOwner);
 
         VaultTypes.MarketConfig[] memory markets = new VaultTypes.MarketConfig[](1);
         markets[0] = marketConfig(MARKET_ID);
-        registry = new MarketRegistryV1(BASE_CHAIN_ID, REGISTRY_ID, address(usdc), markets);
+        registry = new MarketRegistryV1(BASE_CHAIN_ID, REGISTRY_ID, address(usdc), 6, address(usdc).codehash, markets);
         vaultFactory = new VaultFactoryV1(address(registry), address(guard));
         vault = PersonalVaultV1(vaultFactory.createVault(owner, LINEAGE, MARKET_ID));
     }
 
     function marketConfig(bytes32 marketId) internal view returns (VaultTypes.MarketConfig memory) {
+        return marketConfigFor(marketId, address(target), 18, address(poolFactory), address(pool), address(router), 100);
+    }
+
+    function marketConfigFor(
+        bytes32 marketId,
+        address targetToken,
+        uint8 targetTokenDecimals,
+        address factory,
+        address pool_,
+        address router_,
+        int24 tickSpacing
+    ) internal view returns (VaultTypes.MarketConfig memory) {
         return VaultTypes.MarketConfig({
             marketId: marketId,
-            targetToken: address(target),
-            factory: address(poolFactory),
-            pool: address(pool),
-            router: address(router),
-            quoter: address(quoter),
-            tickSpacing: 100,
-            swapSelector: bytes4(keccak256("exactInputSingle(bytes)")),
-            factoryCodeHash: address(poolFactory).codehash,
-            poolCodeHash: address(pool).codehash,
-            routerCodeHash: address(router).codehash,
-            quoterCodeHash: address(quoter).codehash
+            targetToken: targetToken,
+            targetTokenDecimals: targetTokenDecimals,
+            factory: factory,
+            pool: pool_,
+            router: router_,
+            tickSpacing: tickSpacing,
+            targetTokenCodeHash: targetToken.codehash,
+            factoryCodeHash: factory.codehash,
+            poolCodeHash: pool_.codehash,
+            routerCodeHash: router_.codehash
         });
     }
 
@@ -114,6 +162,10 @@ abstract contract TestSetup is Test {
             platformFeeBps: 300,
             expiresAt: uint64(block.timestamp + 30 days)
         });
+    }
+
+    function sortedTokens(address tokenA, address tokenB) internal pure returns (address token0, address token1) {
+        return tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
     }
 
     function depositAsOwner(uint256 amount) internal {

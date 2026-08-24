@@ -9,6 +9,7 @@ optimizer_runs = 20_000
 fuzz.runs = 256
 invariant.runs = 128
 invariant.depth = 64
+fs_permissions = [{ access = "read", path = "./registry" }]
 
 [profile.ci]
 fuzz.runs = 2_000

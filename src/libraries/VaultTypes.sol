@@ -5,16 +5,15 @@ library VaultTypes {
     struct MarketConfig {
         bytes32 marketId;
         address targetToken;
+        uint8 targetTokenDecimals;
         address factory;
         address pool;
         address router;
-        address quoter;
         int24 tickSpacing;
-        bytes4 swapSelector;
+        bytes32 targetTokenCodeHash;
         bytes32 factoryCodeHash;
         bytes32 poolCodeHash;
         bytes32 routerCodeHash;
-        bytes32 quoterCodeHash;
     }
 
     struct Mandate {

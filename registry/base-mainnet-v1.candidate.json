@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "status": "candidate",
+  "marketCount": 5,
+  "registryId": "base-mainnet-v1",
+  "registryIdHash": "0x66d802b630116d304b91ea61122ef1225c033e81f359364059f92075a7f08608",
+  "chainId": 8453,
+  "verificationBlock": {
+    "number": 49974000,
+    "hash": "0x27edac8e7e6904aa7d05827d21be7480a2631af9f21ba77c0aac4e54e1b5bb40",
+    "timestamp": "2026-08-14T19:55:47.000Z"
+  },
+  "source": {
+    "repository": "https://github.com/aerodrome-finance/slipstream",
+    "commit": "f8717faaae6e6717db3c8e3850149c01a79c0603"
+  },
+  "selectors": {
+    "exactInputSingle": "0xa026383e",
+    "quoteExactInputSingle": "0x9e7defe6"
+  },
+  "tokens": {
+    "USDC": {
+      "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "decimals": 6,
+      "codeHash": "0xa6705a10bb756b5dea144591118be77d7af0c3eee3bf2dfe2583dcb0364fefab"
+    },
+    "cbBTC": {
+      "address": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+      "decimals": 8,
+      "codeHash": "0x91149353e08445ba77a52bf7e4cef919054027f4ad42812b4314bbaf2abd8b71"
+    },
+    "WETH": {
+      "address": "0x4200000000000000000000000000000000000006",
+      "decimals": 18,
+      "codeHash": "0x8a3a1f6a9f9dce633117adee5b458245835a8645a8c8726a26382a4622508b1c"
+    },
+    "AERO": {
+      "address": "0x940181a94A35A4569E4529A3CDfB74e38FD98631",
+      "decimals": 18,
+      "codeHash": "0x6e2d6a09208d3bbad8885809c4db6a91be93d78c0cabc06ded4dc6fa38a1b458"
+    },
+    "EURC": {
+      "address": "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
+      "decimals": 6,
+      "codeHash": "0xdc7d03167b2b33566fa1cf50046e5bf4828f6d401678ed832d2cd7973ea17380"
+    }
+  },
+  "deployments": {
+    "initial": {
+      "factory": {
+        "address": "0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A",
+        "codeHash": "0x7340cf80843bd721bcaefbfc050e38304cb4174c239e6e914e3056f27f39b11c"
+      },
+      "poolImplementation": {
+        "address": "0xeC8E5342B19977B4eF8892e02D8DAEcfa1315831",
+        "codeHash": "0x772fb5c610b40a122036f544e5b9b5bce6becb19db9524331289d1aaed2d5888"
+      },
+      "router": {
+        "address": "0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5",
+        "codeHash": "0x8ca2876cc2c509da1648ef2ad21a8849c261cf7316b675119b98ba298c8657e7"
+      },
+      "quoter": {
+        "address": "0x254cF9E1E6e233aa1AC962CB9B05b2cfeAaE15b0",
+        "codeHash": "0xfb0ab713266d089d5b6ac48d50455c4fadc9cd49a1efcc83a091e7c2e48dad0e"
+      },
+      "mutableSnapshot": {
+        "swapFeeModule": {
+          "address": "0x090b2A6bb475c00e2256e2095A60887cD710803b",
+          "codeHash": "0xfe6ae775924e93250b0c469d7065d51b0e14462d7cf6a8caae56e5fa4806b674"
+        }
+      }
+    },
+    "v3": {
+      "factory": {
+        "address": "0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef",
+        "codeHash": "0x4961963494e47f363617ab9a0f3999a28b33c519e51392952db06350cce700bd"
+      },
+      "poolImplementation": {
+        "address": "0xc770898522D2A9c8Da7A10D63989b6b58305B665",
+        "codeHash": "0xe63484f408c701770737a3c40e435c8183c66b1663f3a8777ce44dd73aff339b"
+      },
+      "router": {
+        "address": "0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F",
+        "codeHash": "0xfedc4e21e1097b0ec1b4f1aa901cf645c22f9e5d297727b0f37275ee1d083df4"
+      },
+      "quoter": {
+        "address": "0x514c8B5f54112481E28028F1166Bd78501089259",
+        "codeHash": "0x4c4c43e0024343e65597f0f0a1b829aaf69e5a6c0a0148fb63d28ff5730be551"
+      },
+      "mutableSnapshot": {
+        "swapFeeModule": {
+          "address": "0x87D8f999BBa9343E8099552426775B51C338E8CB",
+          "codeHash": "0x61088c29b9f9e134daf99b5cd925b32b3340acde306edb78cbbdaea1bf683904"
+        }
+      }
+    }
+  },
+  "markets": [
+    {
+      "marketId": "cbbtc-usdc-v3-50",
+      "marketIdHash": "0x564a70aebc380cc6c56348e5bbd5ebc149c60743f26331f672734e9d725c37b9",
+      "target": "cbBTC",
+      "deployment": "v3",
+      "pool": {
+        "address": "0x160d7e9d948b16c163332a277b393c288408eb12",
+        "codeHash": "0xad8972486d67a48db1f32f254a4c2f4be28df0b5f399559d1e7cd8fbcfbedc96",
+        "token0": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "token1": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+        "tickSpacing": 50
+      },
+      "mutableSnapshot": {
+        "feePips": 88,
+        "observationCardinality": 900,
+        "observationCardinalityNext": 900
+      }
+    },
+    {
+      "marketId": "weth-usdc-initial-100",
+      "marketIdHash": "0xcd07c97ac24d4bcc78e487e5c8a2c624c76dbfe11709d7702d786d5c72dac4ce",
+      "target": "WETH",
+      "deployment": "initial",
+      "pool": {
+        "address": "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59",
+        "codeHash": "0xacd6710f7037ad095b1e4d5f8ee5b2681069cb4dd316e77e4e0cb8f85716a2a1",
+        "token0": "0x4200000000000000000000000000000000000006",
+        "token1": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "tickSpacing": 100
+      },
+      "mutableSnapshot": {
+        "feePips": 394,
+        "observationCardinality": 3010,
+        "observationCardinalityNext": 3010
+      }
+    },
+    {
+      "marketId": "aero-usdc-initial-100",
+      "marketIdHash": "0x7ebfe783bbcc1ec2dcaa1228bc1ffbee5daf0e2ef7b8a6c64ab4cef627086d5b",
+      "target": "AERO",
+      "deployment": "initial",
+      "pool": {
+        "address": "0xa4fdd479eda160671636e2ecf8f993cbf86258a8",
+        "codeHash": "0xacd6710f7037ad095b1e4d5f8ee5b2681069cb4dd316e77e4e0cb8f85716a2a1",
+        "token0": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "token1": "0x940181a94A35A4569E4529A3CDfB74e38FD98631",
+        "tickSpacing": 100
+      },
+      "mutableSnapshot": {
+        "feePips": 500,
+        "observationCardinality": 360,
+        "observationCardinalityNext": 360
+      }
+    },
+    {
+      "marketId": "aero-usdc-initial-2000",
+      "marketIdHash": "0x0b41bea95350b33a7dd674dd66fbbd08ca8d0b8d5fc5e59903391fb2c92b58ef",
+      "target": "AERO",
+      "deployment": "initial",
+      "pool": {
+        "address": "0xbe00ff35af70e8415d0eb605a286d8a45466a4c1",
+        "codeHash": "0xacd6710f7037ad095b1e4d5f8ee5b2681069cb4dd316e77e4e0cb8f85716a2a1",
+        "token0": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "token1": "0x940181a94A35A4569E4529A3CDfB74e38FD98631",
+        "tickSpacing": 2000
+      },
+      "mutableSnapshot": {
+        "feePips": 10000,
+        "observationCardinality": 200,
+        "observationCardinalityNext": 200
+      }
+    },
+    {
+      "marketId": "eurc-usdc-v3-1",
+      "marketIdHash": "0x133be3360b71677cf285747372c84c7e24931daf7ab9c0ba3ba0b17ea28201c8",
+      "target": "EURC",
+      "deployment": "v3",
+      "pool": {
+        "address": "0xf39b7c34be147f5dc1bc374f27af2e9f03ad3113",
+        "codeHash": "0xad8972486d67a48db1f32f254a4c2f4be28df0b5f399559d1e7cd8fbcfbedc96",
+        "token0": "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
+        "token1": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "tickSpacing": 1
+      },
+      "mutableSnapshot": {
+        "feePips": 73,
+        "observationCardinality": 900,
+        "observationCardinalityNext": 900
+      }
+    }
+  ]
+}
