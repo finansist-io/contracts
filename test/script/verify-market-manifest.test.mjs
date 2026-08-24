@@ -15,7 +15,8 @@ test("candidate manifest has a complete normalized snapshot", () => {
   const snapshot = expectedSnapshot(manifest);
 
   assert.equal(snapshot.chainId, 8453);
-  assert.equal(snapshot.accountingToken, manifest.tokens.USDC.address.toLowerCase());
+  assert.equal(manifest.accountingAsset, "USDC");
+  assert.equal(snapshot.accountingToken, manifest.tokens[manifest.accountingAsset].address.toLowerCase());
   assert.equal(Object.keys(snapshot.markets).length, manifest.marketCount);
   assert.deepEqual(Object.keys(snapshot.priceFeeds).sort(), Object.keys(manifest.tokens).sort());
   assert.equal(snapshot.priceFeeds.AERO.description, "AERO / USD");
@@ -46,7 +47,7 @@ test("price-feed disagreement fails before manifest comparison", () => {
 test("manifest drift is rejected", () => {
   const snapshot = expectedSnapshot(manifest);
   const changed = structuredClone(manifest);
-  changed.tokens.USDC.decimals = 18;
+  changed.tokens[changed.accountingAsset].decimals = 18;
 
   assert.throws(() => verifyManifestAgainstSnapshots(changed, snapshot, snapshot), /manifest mismatch/);
 });
@@ -56,6 +57,20 @@ test("an active label cannot be inferred from candidate evidence", () => {
   changed.status = "active";
 
   assert.throws(() => validateManifest(changed), /only candidate manifests/);
+});
+
+test("accounting asset must name a token", () => {
+  const changed = structuredClone(manifest);
+  changed.accountingAsset = "UNKNOWN";
+
+  assert.throws(() => validateManifest(changed), /unknown accounting asset/);
+});
+
+test("accounting asset cannot be a market target", () => {
+  const changed = structuredClone(manifest);
+  changed.markets[0].target = changed.accountingAsset;
+
+  assert.throws(() => validateManifest(changed), /accounting asset cannot be a target/);
 });
 
 test("every token has one standard feed and provider provenance has no RPC URL", () => {

@@ -4,6 +4,7 @@
   "marketCount": 5,
   "registryId": "base-mainnet-v1",
   "registryIdHash": "0x66d802b630116d304b91ea61122ef1225c033e81f359364059f92075a7f08608",
+  "accountingAsset": "USDC",
   "chainId": 8453,
   "verificationBlock": {
     "number": 49974000,

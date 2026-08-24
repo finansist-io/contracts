@@ -20,22 +20,32 @@ contract MarketRegistryV1ForkTest is Test {
         uint256 verificationBlock = vm.parseJsonUint(manifest, ".verificationBlock.number");
         vm.createSelectFork(rpcUrl, verificationBlock);
 
+        string[] memory assetKeys = vm.parseJsonKeys(manifest, ".tokens");
+        VaultTypes.AssetConfig[] memory assets = new VaultTypes.AssetConfig[](assetKeys.length);
+        for (uint256 i = 0; i < assets.length; ++i) {
+            assets[i] = _readAsset(manifest, assetKeys[i]);
+        }
+
         VaultTypes.MarketConfig[] memory markets =
             new VaultTypes.MarketConfig[](vm.parseJsonUint(manifest, ".marketCount"));
         for (uint256 i = 0; i < markets.length; ++i) {
             markets[i] = _readMarket(manifest, i);
         }
 
-        address accountingToken = vm.parseJsonAddress(manifest, ".tokens.USDC.address");
+        string memory accountingAssetKey = vm.parseJsonString(manifest, ".accountingAsset");
+        bytes32 accountingAssetId = keccak256(bytes(accountingAssetKey));
+        address accountingToken =
+            vm.parseJsonAddress(manifest, string.concat(".tokens.", accountingAssetKey, ".address"));
         MarketRegistryV1 registry = new MarketRegistryV1(
             vm.parseJsonUint(manifest, ".chainId"),
             vm.parseJsonBytes32(manifest, ".registryIdHash"),
-            accountingToken,
-            uint8(vm.parseJsonUint(manifest, ".tokens.USDC.decimals")),
-            vm.parseJsonBytes32(manifest, ".tokens.USDC.codeHash"),
+            accountingAssetId,
+            assets,
             markets
         );
 
+        assertEq(registry.assetCount(), assets.length);
+        assertEq(registry.accountingAssetId(), accountingAssetId);
         assertEq(registry.marketCount(), markets.length);
         assertEq(registry.accountingToken(), accountingToken);
         for (uint256 i = 0; i < markets.length; ++i) {
@@ -43,22 +53,39 @@ contract MarketRegistryV1ForkTest is Test {
         }
     }
 
+    function _readAsset(string memory manifest, string memory symbol)
+        private
+        pure
+        returns (VaultTypes.AssetConfig memory)
+    {
+        string memory tokenRoot = string.concat(".tokens.", symbol);
+        string memory feedRoot = string.concat(".priceFeeds.", symbol);
+        return VaultTypes.AssetConfig({
+            assetId: keccak256(bytes(symbol)),
+            token: vm.parseJsonAddress(manifest, string.concat(tokenRoot, ".address")),
+            usdPriceFeed: vm.parseJsonAddress(manifest, string.concat(feedRoot, ".proxy.address")),
+            tokenDecimals: uint8(vm.parseJsonUint(manifest, string.concat(tokenRoot, ".decimals"))),
+            priceFeedDecimals: uint8(vm.parseJsonUint(manifest, string.concat(feedRoot, ".decimals"))),
+            priceFeedVersion: vm.parseJsonUint(manifest, string.concat(feedRoot, ".version")),
+            tokenCodeHash: vm.parseJsonBytes32(manifest, string.concat(tokenRoot, ".codeHash")),
+            priceFeedCodeHash: vm.parseJsonBytes32(manifest, string.concat(feedRoot, ".proxy.codeHash")),
+            priceFeedDescriptionHash: vm.parseJsonBytes32(manifest, string.concat(feedRoot, ".descriptionHash"))
+        });
+    }
+
     function _readMarket(string memory manifest, uint256 index) private pure returns (VaultTypes.MarketConfig memory) {
         string memory root = string.concat(".markets[", vm.toString(index), "]");
         string memory targetSymbol = vm.parseJsonString(manifest, string.concat(root, ".target"));
         string memory deployment = vm.parseJsonString(manifest, string.concat(root, ".deployment"));
-        string memory targetRoot = string.concat(".tokens.", targetSymbol);
         string memory deploymentRoot = string.concat(".deployments.", deployment);
 
         return VaultTypes.MarketConfig({
             marketId: vm.parseJsonBytes32(manifest, string.concat(root, ".marketIdHash")),
-            targetToken: vm.parseJsonAddress(manifest, string.concat(targetRoot, ".address")),
-            targetTokenDecimals: uint8(vm.parseJsonUint(manifest, string.concat(targetRoot, ".decimals"))),
+            targetAssetId: keccak256(bytes(targetSymbol)),
             factory: vm.parseJsonAddress(manifest, string.concat(deploymentRoot, ".factory.address")),
             pool: vm.parseJsonAddress(manifest, string.concat(root, ".pool.address")),
             router: vm.parseJsonAddress(manifest, string.concat(deploymentRoot, ".router.address")),
             tickSpacing: int24(vm.parseJsonInt(manifest, string.concat(root, ".pool.tickSpacing"))),
-            targetTokenCodeHash: vm.parseJsonBytes32(manifest, string.concat(targetRoot, ".codeHash")),
             factoryCodeHash: vm.parseJsonBytes32(manifest, string.concat(deploymentRoot, ".factory.codeHash")),
             poolCodeHash: vm.parseJsonBytes32(manifest, string.concat(root, ".pool.codeHash")),
             routerCodeHash: vm.parseJsonBytes32(manifest, string.concat(deploymentRoot, ".router.codeHash"))

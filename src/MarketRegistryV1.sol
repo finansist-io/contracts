@@ -3,6 +3,7 @@ pragma solidity 0.8.35;
 
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
+import {IChainlinkFeedIdentity} from "./interfaces/IChainlinkFeedIdentity.sol";
 import {IMarketRegistryV1} from "./interfaces/IMarketRegistryV1.sol";
 import {
     ISlipstreamFactoryIdentity,
@@ -16,60 +17,71 @@ contract MarketRegistryV1 is IMarketRegistryV1 {
         bytes4(keccak256("exactInputSingle((address,address,int24,address,uint256,uint256,uint256,uint160))"));
 
     error WrongChain(uint256 expected, uint256 actual);
-    error ZeroAddress();
     error EmptyRegistry();
+    error InvalidAsset(bytes32 assetId);
+    error DuplicateAsset(bytes32 assetId);
+    error DuplicateToken(address token);
+    error DuplicatePriceFeed(address priceFeed);
     error InvalidMarket(bytes32 marketId);
     error DuplicateMarket(bytes32 marketId);
     error EmptyCodeHash(address target);
     error CodeHashMismatch(address target, bytes32 expected, bytes32 actual);
     error TokenDecimalsMismatch(address token, uint8 expected, uint8 actual);
+    error PriceFeedDecimalsMismatch(address priceFeed, uint8 expected, uint8 actual);
+    error PriceFeedDescriptionMismatch(address priceFeed, bytes32 expected, bytes32 actual);
+    error PriceFeedVersionMismatch(address priceFeed, uint256 expected, uint256 actual);
     error PoolTokenMismatch(bytes32 marketId, address token0, address token1);
     error PoolTickSpacingMismatch(bytes32 marketId, int24 expected, int24 actual);
     error PoolFactoryMismatch(bytes32 marketId, address expected, address actual);
     error FactoryLookupMismatch(bytes32 marketId, address expected, address actual);
     error EndpointFactoryMismatch(address endpoint, address expected, address actual);
+    error UnknownAsset(bytes32 assetId);
     error UnknownMarket(bytes32 marketId);
 
     uint256 private immutable _chainId;
     bytes32 private immutable _registryId;
-    address private immutable _accountingToken;
-    uint8 private immutable _accountingTokenDecimals;
-    bytes32 private immutable _accountingTokenCodeHash;
+    bytes32 private immutable _accountingAssetId;
 
+    bytes32[] private _assetIds;
     bytes32[] private _marketIds;
+    mapping(bytes32 assetId => VaultTypes.AssetConfig config) private _assets;
     mapping(bytes32 marketId => VaultTypes.MarketConfig config) private _markets;
 
     constructor(
         uint256 expectedChainId,
         bytes32 registryId_,
-        address accountingToken_,
-        uint8 accountingTokenDecimals_,
-        bytes32 accountingTokenCodeHash_,
+        bytes32 accountingAssetId_,
+        VaultTypes.AssetConfig[] memory assets_,
         VaultTypes.MarketConfig[] memory markets_
     ) {
         if (block.chainid != expectedChainId) {
             revert WrongChain(expectedChainId, block.chainid);
         }
         if (registryId_ == bytes32(0)) revert EmptyRegistry();
-        if (accountingToken_ == address(0)) revert ZeroAddress();
-        if (markets_.length == 0) revert EmptyRegistry();
-
-        _requireCodeHash(accountingToken_, accountingTokenCodeHash_);
-        _requireDecimals(accountingToken_, accountingTokenDecimals_);
+        if (assets_.length == 0 || markets_.length == 0) revert EmptyRegistry();
 
         _chainId = expectedChainId;
         _registryId = registryId_;
-        _accountingToken = accountingToken_;
-        _accountingTokenDecimals = accountingTokenDecimals_;
-        _accountingTokenCodeHash = accountingTokenCodeHash_;
+        _accountingAssetId = accountingAssetId_;
+
+        for (uint256 i = 0; i < assets_.length; ++i) {
+            _registerAsset(assets_[i]);
+        }
+
+        VaultTypes.AssetConfig memory accountingAsset = _assets[accountingAssetId_];
+        if (accountingAsset.assetId == bytes32(0)) revert UnknownAsset(accountingAssetId_);
 
         for (uint256 i = 0; i < markets_.length; ++i) {
             VaultTypes.MarketConfig memory market = markets_[i];
-            _validateMarket(market, accountingToken_);
             if (_markets[market.marketId].marketId != bytes32(0)) revert DuplicateMarket(market.marketId);
+            _validateMarket(market, accountingAsset);
             _markets[market.marketId] = market;
             _marketIds.push(market.marketId);
         }
+    }
+
+    function assetCount() external view returns (uint256) {
+        return _assetIds.length;
     }
 
     function marketCount() external view returns (uint256) {
@@ -84,16 +96,29 @@ contract MarketRegistryV1 is IMarketRegistryV1 {
         return _registryId;
     }
 
+    function accountingAssetId() external view returns (bytes32) {
+        return _accountingAssetId;
+    }
+
     function accountingToken() external view returns (address) {
-        return _accountingToken;
+        return _assets[_accountingAssetId].token;
     }
 
     function accountingTokenDecimals() external view returns (uint8) {
-        return _accountingTokenDecimals;
+        return _assets[_accountingAssetId].tokenDecimals;
     }
 
     function accountingTokenCodeHash() external view returns (bytes32) {
-        return _accountingTokenCodeHash;
+        return _assets[_accountingAssetId].tokenCodeHash;
+    }
+
+    function assetIdAt(uint256 index) external view returns (bytes32) {
+        return _assetIds[index];
+    }
+
+    function getAsset(bytes32 assetId) external view returns (VaultTypes.AssetConfig memory asset) {
+        asset = _assets[assetId];
+        if (asset.assetId == bytes32(0)) revert UnknownAsset(assetId);
     }
 
     function marketIdAt(uint256 index) external view returns (bytes32) {
@@ -105,25 +130,66 @@ contract MarketRegistryV1 is IMarketRegistryV1 {
         if (market.marketId == bytes32(0)) revert UnknownMarket(marketId);
     }
 
-    function _validateMarket(VaultTypes.MarketConfig memory market, address accountingToken_) private view {
+    function _registerAsset(VaultTypes.AssetConfig memory asset) private {
         if (
-            market.marketId == bytes32(0) || market.targetToken == address(0) || market.targetToken == accountingToken_
-                || market.factory == address(0) || market.pool == address(0) || market.router == address(0)
-                || market.tickSpacing <= 0
+            asset.assetId == bytes32(0) || asset.token == address(0) || asset.usdPriceFeed == address(0)
+                || asset.priceFeedDescriptionHash == bytes32(0) || asset.priceFeedVersion == 0
+        ) revert InvalidAsset(asset.assetId);
+        if (_assets[asset.assetId].assetId != bytes32(0)) revert DuplicateAsset(asset.assetId);
+        for (uint256 i = 0; i < _assetIds.length; ++i) {
+            VaultTypes.AssetConfig storage registered = _assets[_assetIds[i]];
+            if (registered.token == asset.token) revert DuplicateToken(asset.token);
+            if (registered.usdPriceFeed == asset.usdPriceFeed) revert DuplicatePriceFeed(asset.usdPriceFeed);
+        }
+
+        _requireCodeHash(asset.token, asset.tokenCodeHash);
+        _requireDecimals(asset.token, asset.tokenDecimals);
+        _requireCodeHash(asset.usdPriceFeed, asset.priceFeedCodeHash);
+
+        IChainlinkFeedIdentity priceFeed = IChainlinkFeedIdentity(asset.usdPriceFeed);
+        uint8 actualDecimals = priceFeed.decimals();
+        if (actualDecimals != asset.priceFeedDecimals) {
+            revert PriceFeedDecimalsMismatch(asset.usdPriceFeed, asset.priceFeedDecimals, actualDecimals);
+        }
+        // forge-lint: disable-next-line(asm-keccak256)
+        bytes32 actualDescriptionHash = keccak256(bytes(priceFeed.description()));
+        if (actualDescriptionHash != asset.priceFeedDescriptionHash) {
+            revert PriceFeedDescriptionMismatch(
+                asset.usdPriceFeed, asset.priceFeedDescriptionHash, actualDescriptionHash
+            );
+        }
+        uint256 actualVersion = priceFeed.version();
+        if (actualVersion != asset.priceFeedVersion) {
+            revert PriceFeedVersionMismatch(asset.usdPriceFeed, asset.priceFeedVersion, actualVersion);
+        }
+
+        _assets[asset.assetId] = asset;
+        _assetIds.push(asset.assetId);
+    }
+
+    function _validateMarket(VaultTypes.MarketConfig memory market, VaultTypes.AssetConfig memory accountingAsset)
+        private
+        view
+    {
+        if (
+            market.marketId == bytes32(0) || market.targetAssetId == bytes32(0)
+                || market.targetAssetId == accountingAsset.assetId || market.factory == address(0)
+                || market.pool == address(0) || market.router == address(0) || market.tickSpacing <= 0
         ) revert InvalidMarket(market.marketId);
 
-        _requireCodeHash(market.targetToken, market.targetTokenCodeHash);
+        VaultTypes.AssetConfig memory targetAsset = _assets[market.targetAssetId];
+        if (targetAsset.assetId == bytes32(0)) revert UnknownAsset(market.targetAssetId);
+
         _requireCodeHash(market.factory, market.factoryCodeHash);
         _requireCodeHash(market.pool, market.poolCodeHash);
         _requireCodeHash(market.router, market.routerCodeHash);
-        _requireDecimals(market.targetToken, market.targetTokenDecimals);
 
         ISlipstreamPoolIdentity pool = ISlipstreamPoolIdentity(market.pool);
         address token0 = pool.token0();
         address token1 = pool.token1();
-        (address expectedToken0, address expectedToken1) = accountingToken_ < market.targetToken
-            ? (accountingToken_, market.targetToken)
-            : (market.targetToken, accountingToken_);
+        (address expectedToken0, address expectedToken1) = accountingAsset.token < targetAsset.token
+            ? (accountingAsset.token, targetAsset.token)
+            : (targetAsset.token, accountingAsset.token);
         if (token0 != expectedToken0 || token1 != expectedToken1) {
             revert PoolTokenMismatch(market.marketId, token0, token1);
         }
@@ -139,7 +205,7 @@ contract MarketRegistryV1 is IMarketRegistryV1 {
         }
 
         address factoryPool = ISlipstreamFactoryIdentity(market.factory)
-            .getPool(accountingToken_, market.targetToken, market.tickSpacing);
+            .getPool(accountingAsset.token, targetAsset.token, market.tickSpacing);
         if (factoryPool != market.pool) revert FactoryLookupMismatch(market.marketId, market.pool, factoryPool);
 
         address routerFactory = ISlipstreamRouterIdentity(market.router).factory();

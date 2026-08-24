@@ -2,15 +2,25 @@
 pragma solidity 0.8.35;
 
 library VaultTypes {
+    struct AssetConfig {
+        bytes32 assetId;
+        address token;
+        address usdPriceFeed;
+        uint8 tokenDecimals;
+        uint8 priceFeedDecimals;
+        uint256 priceFeedVersion;
+        bytes32 tokenCodeHash;
+        bytes32 priceFeedCodeHash;
+        bytes32 priceFeedDescriptionHash;
+    }
+
     struct MarketConfig {
         bytes32 marketId;
-        address targetToken;
-        uint8 targetTokenDecimals;
+        bytes32 targetAssetId;
         address factory;
         address pool;
         address router;
         int24 tickSpacing;
-        bytes32 targetTokenCodeHash;
         bytes32 factoryCodeHash;
         bytes32 poolCodeHash;
         bytes32 routerCodeHash;

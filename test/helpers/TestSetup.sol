@@ -81,9 +81,23 @@ contract MockSlipstreamRouter {
     }
 }
 
+contract MockPriceFeed {
+    uint8 public immutable decimals;
+    uint256 public immutable version;
+    string public description;
+
+    constructor(string memory description_, uint8 decimals_, uint256 version_) {
+        description = description_;
+        decimals = decimals_;
+        version = version_;
+    }
+}
+
 abstract contract TestSetup is Test {
     uint256 internal constant BASE_CHAIN_ID = 8453;
     bytes32 internal constant REGISTRY_ID = keccak256("base-mainnet-v1-test");
+    bytes32 internal constant USDC_ASSET_ID = keccak256("USDC");
+    bytes32 internal constant TARGET_ASSET_ID = keccak256("WETH");
     bytes32 internal constant MARKET_ID = keccak256("weth-usdc-slipstream-test");
     bytes32 internal constant LINEAGE = keccak256("strategy-lineage");
 
@@ -98,6 +112,8 @@ abstract contract TestSetup is Test {
     MockSlipstreamFactory internal poolFactory;
     MockSlipstreamPool internal pool;
     MockSlipstreamRouter internal router;
+    MockPriceFeed internal usdcPriceFeed;
+    MockPriceFeed internal targetPriceFeed;
     EntryGuard internal guard;
     MarketRegistryV1 internal registry;
     VaultFactoryV1 internal vaultFactory;
@@ -111,24 +127,28 @@ abstract contract TestSetup is Test {
         (address token0, address token1) = sortedTokens(address(usdc), address(target));
         pool = new MockSlipstreamPool(address(poolFactory), token0, token1, 100);
         router = new MockSlipstreamRouter(address(poolFactory));
+        usdcPriceFeed = new MockPriceFeed("USDC / USD", 8, 6);
+        targetPriceFeed = new MockPriceFeed("ETH / USD", 8, 6);
         poolFactory.setPool(address(usdc), address(target), 100, address(pool));
         guard = new EntryGuard(guardOwner);
 
+        VaultTypes.AssetConfig[] memory assets = new VaultTypes.AssetConfig[](2);
+        assets[0] = assetConfig(USDC_ASSET_ID, address(usdc), 6, address(usdcPriceFeed), "USDC / USD");
+        assets[1] = assetConfig(TARGET_ASSET_ID, address(target), 18, address(targetPriceFeed), "ETH / USD");
         VaultTypes.MarketConfig[] memory markets = new VaultTypes.MarketConfig[](1);
         markets[0] = marketConfig(MARKET_ID);
-        registry = new MarketRegistryV1(BASE_CHAIN_ID, REGISTRY_ID, address(usdc), 6, address(usdc).codehash, markets);
+        registry = new MarketRegistryV1(BASE_CHAIN_ID, REGISTRY_ID, USDC_ASSET_ID, assets, markets);
         vaultFactory = new VaultFactoryV1(address(registry), address(guard));
         vault = PersonalVaultV1(vaultFactory.createVault(owner, LINEAGE, MARKET_ID));
     }
 
     function marketConfig(bytes32 marketId) internal view returns (VaultTypes.MarketConfig memory) {
-        return marketConfigFor(marketId, address(target), 18, address(poolFactory), address(pool), address(router), 100);
+        return marketConfigFor(marketId, TARGET_ASSET_ID, address(poolFactory), address(pool), address(router), 100);
     }
 
     function marketConfigFor(
         bytes32 marketId,
-        address targetToken,
-        uint8 targetTokenDecimals,
+        bytes32 targetAssetId,
         address factory,
         address pool_,
         address router_,
@@ -136,16 +156,34 @@ abstract contract TestSetup is Test {
     ) internal view returns (VaultTypes.MarketConfig memory) {
         return VaultTypes.MarketConfig({
             marketId: marketId,
-            targetToken: targetToken,
-            targetTokenDecimals: targetTokenDecimals,
+            targetAssetId: targetAssetId,
             factory: factory,
             pool: pool_,
             router: router_,
             tickSpacing: tickSpacing,
-            targetTokenCodeHash: targetToken.codehash,
             factoryCodeHash: factory.codehash,
             poolCodeHash: pool_.codehash,
             routerCodeHash: router_.codehash
+        });
+    }
+
+    function assetConfig(
+        bytes32 assetId,
+        address token,
+        uint8 tokenDecimals,
+        address priceFeed,
+        string memory priceFeedDescription
+    ) internal view returns (VaultTypes.AssetConfig memory) {
+        return VaultTypes.AssetConfig({
+            assetId: assetId,
+            token: token,
+            usdPriceFeed: priceFeed,
+            tokenDecimals: tokenDecimals,
+            priceFeedDecimals: 8,
+            priceFeedVersion: 6,
+            tokenCodeHash: token.codehash,
+            priceFeedCodeHash: priceFeed.codehash,
+            priceFeedDescriptionHash: keccak256(bytes(priceFeedDescription))
         });
     }
 

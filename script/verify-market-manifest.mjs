@@ -199,6 +199,10 @@ export function validateManifest(manifest) {
     normalizeHash(token.codeHash);
     invariant(Number.isInteger(token.decimals) && token.decimals >= 0 && token.decimals <= 255, "invalid decimals");
   }
+  invariant(
+    typeof manifest.accountingAsset === "string" && manifest.tokens[manifest.accountingAsset],
+    "unknown accounting asset"
+  );
 
   const tokenSymbols = Object.keys(manifest.tokens).sort();
   const feedSymbols = Object.keys(manifest.priceFeeds).sort();
@@ -249,6 +253,7 @@ export function validateManifest(manifest) {
     invariant(!marketIds.has(market.marketId), `duplicate market: ${market.marketId}`);
     marketIds.add(market.marketId);
     invariant(manifest.tokens[market.target], `unknown target: ${market.target}`);
+    invariant(market.target !== manifest.accountingAsset, `accounting asset cannot be a target: ${market.marketId}`);
     invariant(manifest.deployments[market.deployment], `unknown deployment: ${market.deployment}`);
     invariant(textHash(market.marketId) === normalizeHash(market.marketIdHash), `wrong market id hash: ${market.marketId}`);
     normalizeAddress(market.pool.address);
@@ -266,7 +271,7 @@ export function validateManifest(manifest) {
       "invalid observation growth snapshot"
     );
 
-    const pair = [manifest.tokens.USDC.address, manifest.tokens[market.target].address]
+    const pair = [manifest.tokens[manifest.accountingAsset].address, manifest.tokens[market.target].address]
       .map(normalizeAddress)
       .sort();
     invariant(normalizeAddress(market.pool.token0) === pair[0], `wrong token0: ${market.marketId}`);
@@ -317,8 +322,7 @@ export function expectedSnapshot(manifest) {
       }
     ])
   );
-  const accountingToken = tokens.USDC;
-  invariant(accountingToken, "USDC accounting token is required");
+  const accountingToken = tokens[manifest.accountingAsset];
   const markets = Object.fromEntries(
     manifest.markets.map((market) => {
       const deployment = deployments[market.deployment];
@@ -471,7 +475,7 @@ async function readSnapshot(manifest, rpcUrl, label) {
     };
   }
 
-  const accountingToken = normalizeAddress(manifest.tokens.USDC.address);
+  const accountingToken = normalizeAddress(manifest.tokens[manifest.accountingAsset].address);
   const markets = {};
   for (const market of manifest.markets) {
     const deployment = deployments[market.deployment];

@@ -4,8 +4,8 @@ These rules are release blockers, not operational preferences.
 
 1. Only the owner can authorize mandates or move owner-accounted funds.
 2. An executor can never select an arbitrary token, pool, router, recipient or calldata.
-3. A vault is permanently bound to one accounting token, target token, strategy lineage,
-   market and registry version.
+3. A vault is permanently bound to the V1 USDC accounting asset, one target asset, strategy
+   lineage, market route and registry version.
 4. Raw ERC-20 balances are not accounting state. Donations are surplus and cannot create
    profit, fees or execution authority.
 5. Accounted owner USDC never exceeds the vault's USDC balance.

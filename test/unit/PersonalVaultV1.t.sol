@@ -7,6 +7,7 @@ import {VaultFactoryV1} from "../../src/VaultFactoryV1.sol";
 import {VaultTypes} from "../../src/libraries/VaultTypes.sol";
 import {
     FeeToken,
+    MockPriceFeed,
     MockSlipstreamFactory,
     MockSlipstreamPool,
     MockSlipstreamRouter,
@@ -178,15 +179,19 @@ contract PersonalVaultV1Test is TestSetup {
         (address token0, address token1) = sortedTokens(address(feeToken), address(target));
         MockSlipstreamPool feePool = new MockSlipstreamPool(address(feePoolFactory), token0, token1, 100);
         MockSlipstreamRouter feeRouter = new MockSlipstreamRouter(address(feePoolFactory));
+        MockPriceFeed feePriceFeed = new MockPriceFeed("FEE / USD", 8, 6);
         feePoolFactory.setPool(address(feeToken), address(target), 100, address(feePool));
 
+        bytes32 feeAssetId = keccak256("FEE");
+        VaultTypes.AssetConfig[] memory assets = new VaultTypes.AssetConfig[](2);
+        assets[0] = assetConfig(feeAssetId, address(feeToken), 18, address(feePriceFeed), "FEE / USD");
+        assets[1] = assetConfig(TARGET_ASSET_ID, address(target), 18, address(targetPriceFeed), "ETH / USD");
         VaultTypes.MarketConfig[] memory markets = new VaultTypes.MarketConfig[](1);
         markets[0] = marketConfigFor(
-            MARKET_ID, address(target), 18, address(feePoolFactory), address(feePool), address(feeRouter), 100
+            MARKET_ID, TARGET_ASSET_ID, address(feePoolFactory), address(feePool), address(feeRouter), 100
         );
-        MarketRegistryV1 feeRegistry = new MarketRegistryV1(
-            BASE_CHAIN_ID, keccak256("fee-token-registry"), address(feeToken), 18, address(feeToken).codehash, markets
-        );
+        MarketRegistryV1 feeRegistry =
+            new MarketRegistryV1(BASE_CHAIN_ID, keccak256("fee-token-registry"), feeAssetId, assets, markets);
         VaultFactoryV1 feeFactory = new VaultFactoryV1(address(feeRegistry), address(guard));
         PersonalVaultV1 feeVault = PersonalVaultV1(feeFactory.createVault(owner, LINEAGE, MARKET_ID));
 

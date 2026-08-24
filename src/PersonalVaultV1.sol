@@ -84,18 +84,19 @@ contract PersonalVaultV1 is Initializable, ReentrancyGuard {
 
         // Interface view calls use STATICCALL, so registry lookups cannot re-enter with state changes.
         VaultTypes.MarketConfig memory market = IMarketRegistryV1(registry_).getMarket(marketId_);
+        VaultTypes.AssetConfig memory targetAsset = IMarketRegistryV1(registry_).getAsset(market.targetAssetId);
         address accountingToken_ = IMarketRegistryV1(registry_).accountingToken();
         if (accountingToken_ == address(0) || accountingToken_.code.length == 0) revert ZeroAddress();
 
         factory = msg.sender;
         owner = owner_;
         accountingToken = accountingToken_;
-        targetToken = market.targetToken;
+        targetToken = targetAsset.token;
         registry = registry_;
         entryGuard = entryGuard_;
         strategyLineage = strategyLineage_;
         marketId = marketId_;
-        emit VaultInitialized(msg.sender, owner_, strategyLineage_, marketId_, market.targetToken, registry_);
+        emit VaultInitialized(msg.sender, owner_, strategyLineage_, marketId_, targetAsset.token, registry_);
     }
 
     function deposit(uint256 amount) external nonReentrant onlyOwner {
