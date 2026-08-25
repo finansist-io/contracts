@@ -6,12 +6,14 @@ Status: pre-deployment. No contract in this repository is approved for deposits 
 execution. The current code establishes custody, mandate, registry and accounting
 boundaries. The checked-in Base market manifest is a verified candidate, not an active
 deployment. It pins the five Chainlink Standard proxies and their explicit-block round
-evidence without freezing the still-open maximum-age policy. Aerodrome execution remains
-absent until route and price-protection policies are frozen and tested.
+evidence plus the Base sequencer uptime identity and status evidence, without freezing the
+still-open maximum-age or recovery-grace policy. Aerodrome execution remains absent until
+route and price-protection policies are frozen and tested.
 
-The current price-reference work is a non-executable prototype. It proves feed validation,
-cross-USD ratio math and Base-fork vectors. It is not live protection until maximum ages and
-the Base sequencer uptime policy are frozen and wired into the complete entry/exit change.
+The current protection work is a non-executable prototype. It proves feed validation,
+cross-USD ratio math, sequencer status/grace validation and Base-fork vectors. It is not live
+protection until maximum ages and the Base sequencer uptime policy are frozen and wired into
+the complete entry/exit change.
 
 ```bash
 forge build

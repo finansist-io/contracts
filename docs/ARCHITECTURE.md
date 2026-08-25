@@ -49,6 +49,16 @@ define slippage, router limits or an executable vault path.
 Before that path can exist, one release must freeze per-feed maximum ages and the Base
 sequencer uptime feed, recovery grace period and failure behavior.
 
+The sequencer-guard prototype uses the one Base uptime proxy pinned by the candidate
+manifest. It accepts only a complete non-future round with zero feed decimals and answer
+`0`, meaning up. It then requires `block.timestamp - startedAt` to be strictly greater than
+an explicit caller-supplied recovery grace period. A down, malformed or future result fails
+closed; an up round still within grace also fails closed. There is no fallback. Uptime
+`updatedAt` receives consistency checks,
+not a price-style maximum age: `startedAt` is the status-transition time used for recovery.
+The executable vault must obtain the proxy and grace period from immutable policy, never
+executor calldata.
+
 The registry has two record types. An asset record owns one token's address, decimals and
 runtime code hash plus its Chainlink USD proxy address, runtime code hash, description hash,
 decimals and version. Asset IDs are the `keccak256` hash of the exact manifest token key. The
@@ -69,10 +79,11 @@ spacing, pool factory identity, the factory's pool lookup and the router's facto
 The registry contract version also pins the one typed `exactInputSingle` ABI selector. The
 candidate manifest separately pins the quoter, pool implementation, fee module and
 explicit-block fee and observation snapshots through two
-independent RPCs. Manifest schema v2 also pins one Chainlink Standard proxy per supported
+independent RPCs. Manifest schema v3 also pins one Chainlink Standard proxy per supported
 asset, the shared proxy bytecode, description, decimals, version, underlying aggregator and
-complete round at that same block. Catalog heartbeat and round state are evidence, not a
-frozen maximum-age policy or contract guarantee.
+complete round at that same block. It separately pins the Base sequencer uptime proxy,
+underlying aggregator and complete status round. Catalog heartbeat and round state are
+evidence, not a frozen maximum-age or recovery-grace policy.
 
 Only the proxy address and runtime code hash are chain-immutable identity. Feed description,
 decimals and version are frozen registry policy: any change fails verification and requires

@@ -3,7 +3,7 @@ pragma solidity 0.8.35;
 
 import {IChainlinkFeedIdentity} from "./IChainlinkFeedIdentity.sol";
 
-interface IChainlinkPriceFeed is IChainlinkFeedIdentity {
+interface IChainlinkAggregatorV3 is IChainlinkFeedIdentity {
     function latestRoundData()
         external
         view

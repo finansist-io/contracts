@@ -3,7 +3,7 @@ pragma solidity 0.8.35;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import {IChainlinkPriceFeed} from "../interfaces/IChainlinkPriceFeed.sol";
+import {IChainlinkAggregatorV3} from "../interfaces/IChainlinkAggregatorV3.sol";
 import {VaultTypes} from "./VaultTypes.sol";
 
 library ChainlinkPriceReference {
@@ -45,7 +45,7 @@ library ChainlinkPriceReference {
     }
 
     function _readNormalizedPrice(VaultTypes.AssetConfig memory asset, uint256 maxAge) private view returns (uint256) {
-        IChainlinkPriceFeed priceFeed = IChainlinkPriceFeed(asset.usdPriceFeed);
+        IChainlinkAggregatorV3 priceFeed = IChainlinkAggregatorV3(asset.usdPriceFeed);
         uint8 actualDecimals = priceFeed.decimals();
         if (actualDecimals != asset.priceFeedDecimals) {
             revert PriceFeedDecimalsMismatch(asset.usdPriceFeed, asset.priceFeedDecimals, actualDecimals);

@@ -21,6 +21,8 @@ test("candidate manifest has a complete normalized snapshot", () => {
   assert.deepEqual(Object.keys(snapshot.priceFeeds).sort(), Object.keys(manifest.tokens).sort());
   assert.equal(snapshot.priceFeeds.AERO.description, "AERO / USD");
   assert.equal(snapshot.priceFeeds.USDC.mutableSnapshot.answer, "99987455");
+  assert.equal(snapshot.sequencerUptimeFeed.description, "L2 Sequencer Uptime Status Feed");
+  assert.equal(snapshot.sequencerUptimeFeed.mutableSnapshot.answer, "0");
 });
 
 test("matching providers and manifest pass", () => {
@@ -44,6 +46,14 @@ test("price-feed disagreement fails before manifest comparison", () => {
   assert.throws(() => verifyManifestAgainstSnapshots(manifest, first, second), /provider disagreement/);
 });
 
+test("sequencer-feed disagreement fails before manifest comparison", () => {
+  const first = expectedSnapshot(manifest);
+  const second = structuredClone(first);
+  second.sequencerUptimeFeed.mutableSnapshot.updatedAtUnixSeconds = "1786726256";
+
+  assert.throws(() => verifyManifestAgainstSnapshots(manifest, first, second), /provider disagreement/);
+});
+
 test("manifest drift is rejected", () => {
   const snapshot = expectedSnapshot(manifest);
   const changed = structuredClone(manifest);
@@ -57,6 +67,13 @@ test("an active label cannot be inferred from candidate evidence", () => {
   changed.status = "active";
 
   assert.throws(() => validateManifest(changed), /only candidate manifests/);
+});
+
+test("schema v2 is rejected after the sequencer cutover", () => {
+  const changed = structuredClone(manifest);
+  changed.schemaVersion = 2;
+
+  assert.throws(() => validateManifest(changed), /unsupported manifest schema/);
 });
 
 test("accounting asset must name a token", () => {
@@ -90,4 +107,25 @@ test("stale or incomplete feed evidence is rejected", () => {
   const incomplete = structuredClone(manifest);
   incomplete.priceFeeds.WETH.mutableSnapshot.answeredInRound = "1";
   assert.throws(() => validateManifest(incomplete), /incomplete feed round/);
+});
+
+test("invalid sequencer evidence is rejected", () => {
+  const unknownStatus = structuredClone(manifest);
+  unknownStatus.sequencerUptimeFeed.mutableSnapshot.answer = "2";
+  assert.throws(() => validateManifest(unknownStatus), /invalid sequencer status round/);
+
+  const future = structuredClone(manifest);
+  future.sequencerUptimeFeed.mutableSnapshot.updatedAtUnixSeconds = "1786737348";
+  assert.throws(() => validateManifest(future), /invalid sequencer timestamps/);
+
+  const incomplete = structuredClone(manifest);
+  incomplete.sequencerUptimeFeed.mutableSnapshot.answeredInRound = "1";
+  assert.throws(() => validateManifest(incomplete), /incomplete sequencer round/);
+});
+
+test("down sequencer status remains valid evidence", () => {
+  const down = structuredClone(manifest);
+  down.sequencerUptimeFeed.mutableSnapshot.answer = "1";
+
+  assert.doesNotThrow(() => validateManifest(down));
 });

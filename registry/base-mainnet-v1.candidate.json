@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "status": "candidate",
   "marketCount": 5,
   "registryId": "base-mainnet-v1",
@@ -22,6 +22,8 @@
       "networkMappingRepository": "https://github.com/smartcontractkit/documentation",
       "networkMappingCommit": "ec8386ebfde1b16c9aed3e0bb76b214dd2afe82c",
       "networkMappingPath": "src/features/data/chains.ts",
+      "sequencerDocumentationCommit": "0c68dda62f7c33974504a4a815dcc212d54edcb1",
+      "sequencerDocumentationPath": "src/content/data-feeds/l2-sequencer-feeds.mdx",
       "variant": "standard"
     }
   },
@@ -186,6 +188,28 @@
         "updatedAtUnixSeconds": "1786707513",
         "answeredInRound": "36893488147419103391"
       }
+    }
+  },
+  "sequencerUptimeFeed": {
+    "proxy": {
+      "address": "0xBCF85224fc0756B9Fa45aA7892530B47e10b6433",
+      "codeHash": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2"
+    },
+    "description": "L2 Sequencer Uptime Status Feed",
+    "descriptionHash": "0xe366a503ef72790f9853f4ec1e00eee1c4d8ab149007981c8706c1f7a7a5a538",
+    "decimals": 0,
+    "version": 1,
+    "mutableSnapshot": {
+      "aggregator": {
+        "address": "0x606c6ecBD272E2174F6710b5974F23fE9899602e",
+        "codeHash": "0x83bd777b0df4cfc33add17478008b2955d5dea1481e7f8170524c104e77c4a11",
+        "typeAndVersion": "OptimismSequencerUptimeFeed 1.0.0"
+      },
+      "roundId": "18446744073709551636",
+      "answer": "0",
+      "startedAtUnixSeconds": "1782491507",
+      "updatedAtUnixSeconds": "1786726255",
+      "answeredInRound": "18446744073709551636"
     }
   },
   "deployments": {

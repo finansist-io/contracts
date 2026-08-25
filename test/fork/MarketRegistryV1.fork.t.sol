@@ -5,9 +5,10 @@ import {Test} from "forge-std/Test.sol";
 
 import {MarketRegistryV1} from "../../src/MarketRegistryV1.sol";
 import {ChainlinkPriceReference} from "../../src/libraries/ChainlinkPriceReference.sol";
+import {ChainlinkSequencerGuard} from "../../src/libraries/ChainlinkSequencerGuard.sol";
 import {VaultTypes} from "../../src/libraries/VaultTypes.sol";
 
-contract ForkPriceReferenceHarness {
+contract ForkProtectionHarness {
     function quote(
         uint256 amountIn,
         VaultTypes.AssetConfig memory inputAsset,
@@ -17,12 +18,16 @@ contract ForkPriceReferenceHarness {
     ) external view returns (uint256) {
         return ChainlinkPriceReference.quote(amountIn, inputAsset, inputMaxAge, outputAsset, outputMaxAge);
     }
+
+    function requireSequencerUp(address feed, uint256 gracePeriod) external view {
+        ChainlinkSequencerGuard.requireUp(feed, gracePeriod);
+    }
 }
 
 contract MarketRegistryV1ForkTest is Test {
     string private constant MANIFEST_PATH = "registry/base-mainnet-v1.candidate.json";
 
-    function testForkCandidateManifestBuildsRegistryAndMatchesPriceVectors() public {
+    function testForkCandidateManifestBuildsRegistryAndMatchesProtectionVectors() public {
         string memory rpcUrl = vm.envOr("BASE_FORK_RPC_URL", string(""));
         if (bytes(rpcUrl).length == 0) {
             vm.skip(true);
@@ -113,7 +118,8 @@ contract MarketRegistryV1ForkTest is Test {
         VaultTypes.MarketConfig[] memory markets,
         string memory accountingAssetKey
     ) private {
-        ForkPriceReferenceHarness priceReference = new ForkPriceReferenceHarness();
+        ForkProtectionHarness protection = new ForkProtectionHarness();
+        protection.requireSequencerUp(vm.parseJsonAddress(manifest, ".sequencerUptimeFeed.proxy.address"), 3_600);
         VaultTypes.AssetConfig memory accountingAsset = registry.getAsset(registry.accountingAssetId());
         uint256 accountingMaxAge =
             vm.parseJsonUint(manifest, string.concat(".priceFeeds.", accountingAssetKey, ".catalogHeartbeatSeconds"));
@@ -126,10 +132,10 @@ contract MarketRegistryV1ForkTest is Test {
             VaultTypes.AssetConfig memory targetAsset = registry.getAsset(markets[i].targetAssetId);
 
             uint256 targetAmount =
-                priceReference.quote(1_000e6, accountingAsset, accountingMaxAge, targetAsset, targetMaxAge);
+                protection.quote(1_000e6, accountingAsset, accountingMaxAge, targetAsset, targetMaxAge);
             assertEq(targetAmount, _expectedTargetAmount(markets[i].targetAssetId));
             assertEq(
-                priceReference.quote(targetAmount, targetAsset, targetMaxAge, accountingAsset, accountingMaxAge),
+                protection.quote(targetAmount, targetAsset, targetMaxAge, accountingAsset, accountingMaxAge),
                 _expectedReturnedUsdc(markets[i].targetAssetId)
             );
         }

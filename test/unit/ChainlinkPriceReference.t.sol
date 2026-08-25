@@ -5,45 +5,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {ChainlinkPriceReference} from "../../src/libraries/ChainlinkPriceReference.sol";
 import {VaultTypes} from "../../src/libraries/VaultTypes.sol";
-
-contract RoundPriceFeed {
-    uint8 public decimals;
-    uint256 public version = 6;
-    string public description;
-
-    uint80 private _roundId;
-    int256 private _answer;
-    uint256 private _startedAt;
-    uint256 private _updatedAt;
-    uint80 private _answeredInRound;
-
-    constructor(string memory description_, uint8 decimals_) {
-        description = description_;
-        decimals = decimals_;
-    }
-
-    function setDecimals(uint8 decimals_) external {
-        decimals = decimals_;
-    }
-
-    function setRound(uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
-        external
-    {
-        _roundId = roundId;
-        _answer = answer;
-        _startedAt = startedAt;
-        _updatedAt = updatedAt;
-        _answeredInRound = answeredInRound;
-    }
-
-    function latestRoundData()
-        external
-        view
-        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
-    {
-        return (_roundId, _answer, _startedAt, _updatedAt, _answeredInRound);
-    }
-}
+import {MockChainlinkAggregatorV3} from "../helpers/MockChainlinkAggregatorV3.sol";
 
 contract ChainlinkPriceReferenceHarness {
     function quote(
@@ -61,16 +23,16 @@ contract ChainlinkPriceReferenceTest is Test {
     uint256 private constant NOW = 1_800_000_000;
 
     ChainlinkPriceReferenceHarness private priceReference;
-    RoundPriceFeed private usdcFeed;
-    RoundPriceFeed private targetFeed;
+    MockChainlinkAggregatorV3 private usdcFeed;
+    MockChainlinkAggregatorV3 private targetFeed;
     VaultTypes.AssetConfig private usdc;
     VaultTypes.AssetConfig private target;
 
     function setUp() public {
         vm.warp(NOW);
         priceReference = new ChainlinkPriceReferenceHarness();
-        usdcFeed = new RoundPriceFeed("USDC / USD", 8);
-        targetFeed = new RoundPriceFeed("ETH / USD", 8);
+        usdcFeed = new MockChainlinkAggregatorV3("USDC / USD", 8, 6);
+        targetFeed = new MockChainlinkAggregatorV3("ETH / USD", 8, 6);
         usdcFeed.setRound(10, 1e8, NOW - 30, NOW - 20, 10);
         targetFeed.setRound(20, 2_000e8, NOW - 20, NOW - 10, 20);
         usdc = _asset(address(1), 6, usdcFeed, 8);
@@ -165,7 +127,7 @@ contract ChainlinkPriceReferenceTest is Test {
         assertLe(roundTrip, amountIn);
     }
 
-    function _asset(address token, uint8 tokenDecimals, RoundPriceFeed feed, uint8 feedDecimals)
+    function _asset(address token, uint8 tokenDecimals, MockChainlinkAggregatorV3 feed, uint8 feedDecimals)
         private
         view
         returns (VaultTypes.AssetConfig memory)

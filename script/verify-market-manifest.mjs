@@ -160,7 +160,7 @@ function firstDifference(expected, actual, path = "snapshot") {
 }
 
 export function validateManifest(manifest) {
-  invariant(manifest.schemaVersion === 2, "unsupported manifest schema");
+  invariant(manifest.schemaVersion === 3, "unsupported manifest schema");
   invariant(manifest.status === "candidate", "only candidate manifests can be verified");
   invariant(textHash(manifest.registryId) === normalizeHash(manifest.registryIdHash), "wrong registry id hash");
   invariant(Number.isSafeInteger(manifest.chainId) && manifest.chainId > 0, "invalid chain id");
@@ -182,6 +182,14 @@ export function validateManifest(manifest) {
     "invalid Chainlink directory hash"
   );
   invariant(manifest.sources?.chainlink?.variant === "standard", "only Chainlink standard feeds are supported");
+  invariant(
+    /^[0-9a-f]{40}$/.test(manifest.sources?.chainlink?.sequencerDocumentationCommit ?? ""),
+    "invalid sequencer documentation commit"
+  );
+  invariant(
+    manifest.sources?.chainlink?.sequencerDocumentationPath === "src/content/data-feeds/l2-sequencer-feeds.mdx",
+    "invalid sequencer documentation path"
+  );
   invariant(Array.isArray(manifest.verificationProviders) && manifest.verificationProviders.length === 2, "two providers required");
   for (const provider of manifest.verificationProviders) {
     invariant(/^[a-z0-9-]+$/.test(provider.id), "invalid verification provider id");
@@ -238,6 +246,36 @@ export function validateManifest(manifest) {
       `feed exceeded catalog heartbeat at verification block: ${symbol}`
     );
   }
+
+  const sequencer = manifest.sequencerUptimeFeed;
+  normalizeAddress(sequencer?.proxy?.address);
+  normalizeHash(sequencer?.proxy?.codeHash);
+  invariant(
+    textHash(sequencer?.description) === normalizeHash(sequencer?.descriptionHash),
+    "wrong sequencer description hash"
+  );
+  invariant(sequencer?.decimals === 0, "invalid sequencer feed decimals");
+  invariant(Number.isSafeInteger(sequencer?.version) && sequencer.version > 0, "invalid sequencer feed version");
+  normalizeAddress(sequencer?.mutableSnapshot?.aggregator?.address);
+  normalizeHash(sequencer?.mutableSnapshot?.aggregator?.codeHash);
+  invariant(sequencer?.mutableSnapshot?.aggregator?.typeAndVersion.length > 0, "empty sequencer aggregator type");
+  const sequencerRoundId = canonicalUint(sequencer?.mutableSnapshot?.roundId, "sequencer round id");
+  const sequencerAnswer = canonicalInt(sequencer?.mutableSnapshot?.answer, "sequencer round answer");
+  const sequencerStartedAt = canonicalUint(sequencer?.mutableSnapshot?.startedAtUnixSeconds, "sequencer round start");
+  const sequencerUpdatedAt = canonicalUint(sequencer?.mutableSnapshot?.updatedAtUnixSeconds, "sequencer round update");
+  const sequencerAnsweredInRound = canonicalUint(
+    sequencer?.mutableSnapshot?.answeredInRound,
+    "sequencer answered round"
+  );
+  invariant(
+    sequencerRoundId > 0 && (sequencerAnswer === 0n || sequencerAnswer === 1n),
+    "invalid sequencer status round"
+  );
+  invariant(
+    sequencerStartedAt > 0 && sequencerStartedAt <= sequencerUpdatedAt && sequencerUpdatedAt <= blockTimestamp,
+    "invalid sequencer timestamps"
+  );
+  invariant(sequencerAnsweredInRound >= sequencerRoundId, "incomplete sequencer round");
 
   for (const deployment of Object.values(manifest.deployments)) {
     for (const component of ["factory", "poolImplementation", "router", "quoter"]) {
@@ -300,28 +338,9 @@ export function expectedSnapshot(manifest) {
     ])
   );
   const priceFeeds = Object.fromEntries(
-    Object.entries(manifest.priceFeeds).map(([symbol, feed]) => [
-      symbol,
-      {
-        proxy: normalizedComponent(feed.proxy),
-        description: feed.description,
-        descriptionHash: normalizeHash(feed.descriptionHash),
-        decimals: feed.decimals,
-        version: feed.version,
-        mutableSnapshot: {
-          aggregator: {
-            ...normalizedComponent(feed.mutableSnapshot.aggregator),
-            typeAndVersion: feed.mutableSnapshot.aggregator.typeAndVersion
-          },
-          roundId: feed.mutableSnapshot.roundId,
-          answer: feed.mutableSnapshot.answer,
-          startedAtUnixSeconds: feed.mutableSnapshot.startedAtUnixSeconds,
-          updatedAtUnixSeconds: feed.mutableSnapshot.updatedAtUnixSeconds,
-          answeredInRound: feed.mutableSnapshot.answeredInRound
-        }
-      }
-    ])
+    Object.entries(manifest.priceFeeds).map(([symbol, feed]) => [symbol, normalizedFeedSnapshot(feed)])
   );
+  const sequencerUptimeFeed = normalizedFeedSnapshot(manifest.sequencerUptimeFeed);
   const accountingToken = tokens[manifest.accountingAsset];
   const markets = Object.fromEntries(
     manifest.markets.map((market) => {
@@ -355,6 +374,7 @@ export function expectedSnapshot(manifest) {
     accountingToken: accountingToken.address,
     tokens,
     priceFeeds,
+    sequencerUptimeFeed,
     deployments,
     markets
   };
@@ -362,6 +382,27 @@ export function expectedSnapshot(manifest) {
 
 function normalizedComponent(component) {
   return { address: normalizeAddress(component.address), codeHash: normalizeHash(component.codeHash) };
+}
+
+function normalizedFeedSnapshot(feed) {
+  return {
+    proxy: normalizedComponent(feed.proxy),
+    description: feed.description,
+    descriptionHash: normalizeHash(feed.descriptionHash),
+    decimals: feed.decimals,
+    version: feed.version,
+    mutableSnapshot: {
+      aggregator: {
+        ...normalizedComponent(feed.mutableSnapshot.aggregator),
+        typeAndVersion: feed.mutableSnapshot.aggregator.typeAndVersion
+      },
+      roundId: feed.mutableSnapshot.roundId,
+      answer: feed.mutableSnapshot.answer,
+      startedAtUnixSeconds: feed.mutableSnapshot.startedAtUnixSeconds,
+      updatedAtUnixSeconds: feed.mutableSnapshot.updatedAtUnixSeconds,
+      answeredInRound: feed.mutableSnapshot.answeredInRound
+    }
+  };
 }
 
 export function verifyManifestAgainstSnapshots(manifest, first, second) {
@@ -454,12 +495,11 @@ async function readSnapshot(manifest, rpcUrl, label) {
     };
   }
 
-  const priceFeeds = {};
-  for (const [symbol, feed] of Object.entries(manifest.priceFeeds)) {
+  const readFeedSnapshot = async (feed) => {
     const proxy = await codeComponent(feed.proxy.address);
     const aggregatorAddress = decodeAddress(await call(proxy.address, selectors.aggregator));
     const description = decodeString(await call(proxy.address, selectors.description));
-    priceFeeds[symbol] = {
+    return {
       proxy,
       description,
       descriptionHash: textHash(description),
@@ -473,7 +513,13 @@ async function readSnapshot(manifest, rpcUrl, label) {
         ...decodeRoundData(await call(proxy.address, selectors.latestRoundData))
       }
     };
+  };
+
+  const priceFeeds = {};
+  for (const [symbol, feed] of Object.entries(manifest.priceFeeds)) {
+    priceFeeds[symbol] = await readFeedSnapshot(feed);
   }
+  const sequencerUptimeFeed = await readFeedSnapshot(manifest.sequencerUptimeFeed);
 
   const accountingToken = normalizeAddress(manifest.tokens[manifest.accountingAsset].address);
   const markets = {};
@@ -513,6 +559,7 @@ async function readSnapshot(manifest, rpcUrl, label) {
     accountingToken,
     tokens,
     priceFeeds,
+    sequencerUptimeFeed,
     deployments,
     markets
   };
