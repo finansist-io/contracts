@@ -4,12 +4,25 @@ pragma solidity 0.8.35;
 import {Test} from "forge-std/Test.sol";
 
 import {MarketRegistryV1} from "../../src/MarketRegistryV1.sol";
+import {ChainlinkPriceReference} from "../../src/libraries/ChainlinkPriceReference.sol";
 import {VaultTypes} from "../../src/libraries/VaultTypes.sol";
+
+contract ForkPriceReferenceHarness {
+    function quote(
+        uint256 amountIn,
+        VaultTypes.AssetConfig memory inputAsset,
+        uint256 inputMaxAge,
+        VaultTypes.AssetConfig memory outputAsset,
+        uint256 outputMaxAge
+    ) external view returns (uint256) {
+        return ChainlinkPriceReference.quote(amountIn, inputAsset, inputMaxAge, outputAsset, outputMaxAge);
+    }
+}
 
 contract MarketRegistryV1ForkTest is Test {
     string private constant MANIFEST_PATH = "registry/base-mainnet-v1.candidate.json";
 
-    function testForkCandidateManifestBuildsRegistry() public {
+    function testForkCandidateManifestBuildsRegistryAndMatchesPriceVectors() public {
         string memory rpcUrl = vm.envOr("BASE_FORK_RPC_URL", string(""));
         if (bytes(rpcUrl).length == 0) {
             vm.skip(true);
@@ -51,6 +64,8 @@ contract MarketRegistryV1ForkTest is Test {
         for (uint256 i = 0; i < markets.length; ++i) {
             assertEq(registry.marketIdAt(i), markets[i].marketId);
         }
+
+        _assertPriceVectors(manifest, registry, markets, accountingAssetKey);
     }
 
     function _readAsset(string memory manifest, string memory symbol)
@@ -90,5 +105,50 @@ contract MarketRegistryV1ForkTest is Test {
             poolCodeHash: vm.parseJsonBytes32(manifest, string.concat(root, ".pool.codeHash")),
             routerCodeHash: vm.parseJsonBytes32(manifest, string.concat(deploymentRoot, ".router.codeHash"))
         });
+    }
+
+    function _assertPriceVectors(
+        string memory manifest,
+        MarketRegistryV1 registry,
+        VaultTypes.MarketConfig[] memory markets,
+        string memory accountingAssetKey
+    ) private {
+        ForkPriceReferenceHarness priceReference = new ForkPriceReferenceHarness();
+        VaultTypes.AssetConfig memory accountingAsset = registry.getAsset(registry.accountingAssetId());
+        uint256 accountingMaxAge =
+            vm.parseJsonUint(manifest, string.concat(".priceFeeds.", accountingAssetKey, ".catalogHeartbeatSeconds"));
+
+        for (uint256 i = 0; i < markets.length; ++i) {
+            string memory marketRoot = string.concat(".markets[", vm.toString(i), "]");
+            string memory targetSymbol = vm.parseJsonString(manifest, string.concat(marketRoot, ".target"));
+            uint256 targetMaxAge =
+                vm.parseJsonUint(manifest, string.concat(".priceFeeds.", targetSymbol, ".catalogHeartbeatSeconds"));
+            VaultTypes.AssetConfig memory targetAsset = registry.getAsset(markets[i].targetAssetId);
+
+            uint256 targetAmount =
+                priceReference.quote(1_000e6, accountingAsset, accountingMaxAge, targetAsset, targetMaxAge);
+            assertEq(targetAmount, _expectedTargetAmount(markets[i].targetAssetId));
+            assertEq(
+                priceReference.quote(targetAmount, targetAsset, targetMaxAge, accountingAsset, accountingMaxAge),
+                _expectedReturnedUsdc(markets[i].targetAssetId)
+            );
+        }
+    }
+
+    function _expectedTargetAmount(bytes32 targetAssetId) private pure returns (uint256) {
+        if (targetAssetId == keccak256("cbBTC")) return 1_590_339;
+        if (targetAssetId == keccak256("WETH")) return 532_614_847_622_860_256;
+        if (targetAssetId == keccak256("AERO")) return 2_499_145_372_505_486_874_728;
+        if (targetAssetId == keccak256("EURC")) return 864_805_380;
+        revert("unknown target");
+    }
+
+    function _expectedReturnedUsdc(bytes32 targetAssetId) private pure returns (uint256) {
+        if (targetAssetId == keccak256("cbBTC")) return 999_999_529;
+        if (
+            targetAssetId == keccak256("WETH") || targetAssetId == keccak256("AERO")
+                || targetAssetId == keccak256("EURC")
+        ) return 999_999_999;
+        revert("unknown target");
     }
 }

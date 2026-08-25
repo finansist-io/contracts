@@ -29,6 +29,26 @@ Entry, exit, price protection, signed owner requests, fee crystallization and te
 recovery are not yet callable. They must not be added until their complete state transition
 and adversarial tests land in the same change.
 
+The price-reference prototype reads the accounting and target USD feeds independently. A
+round is usable only when its ID, start time and update time are nonzero, its answer is
+positive, `answeredInRound` is not behind its ID, its start is not after its update, its
+update is not in the future and its age is within an explicit caller-supplied maximum. There
+is no previous-round or single-feed fallback.
+
+Both paper and live execution must use the same integer quote. Feed answers are normalized
+to 18 decimals, then the input amount is converted into output-token base units with one
+full-precision floor division:
+
+`floor(amountIn * inputPrice18 * 10^outputDecimals / (outputPrice18 * 10^inputDecimals))`
+
+The prototype supports feed decimals up to 18 and token-decimal gaps up to 18. Registry
+identity checks and runtime feed-decimal checks must agree.
+
+Entry and exit use the same function with the asset order reversed. The prototype does not
+define slippage, router limits or an executable vault path.
+Before that path can exist, one release must freeze per-feed maximum ages and the Base
+sequencer uptime feed, recovery grace period and failure behavior.
+
 The registry has two record types. An asset record owns one token's address, decimals and
 runtime code hash plus its Chainlink USD proxy address, runtime code hash, description hash,
 decimals and version. Asset IDs are the `keccak256` hash of the exact manifest token key. The

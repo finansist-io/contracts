@@ -9,11 +9,16 @@ deployment. It pins the five Chainlink Standard proxies and their explicit-block
 evidence without freezing the still-open maximum-age policy. Aerodrome execution remains
 absent until route and price-protection policies are frozen and tested.
 
+The current price-reference work is a non-executable prototype. It proves feed validation,
+cross-USD ratio math and Base-fork vectors. It is not live protection until maximum ages and
+the Base sequencer uptime policy are frozen and wired into the complete entry/exit change.
+
 ```bash
 forge build
 forge lint
 forge test
 FOUNDRY_PROFILE=ci forge test
+BASE_FORK_RPC_URL=... forge test --match-path 'test/fork/*.fork.t.sol'
 node --test test/script/*.test.mjs
 MANIFEST_RPC_URL_BLASTAPI_BASE_PUBLIC=... \
   MANIFEST_RPC_URL_TENDERLY_BASE_PUBLIC=... node script/verify-market-manifest.mjs
