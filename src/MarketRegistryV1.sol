@@ -13,6 +13,8 @@ import {
 import {VaultTypes} from "./libraries/VaultTypes.sol";
 
 contract MarketRegistryV1 is IMarketRegistryV1 {
+    uint8 private constant MAX_SUPPORTED_DECIMALS = 18;
+
     bytes4 public constant override EXACT_INPUT_SINGLE_SELECTOR =
         bytes4(keccak256("exactInputSingle((address,address,int24,address,uint256,uint256,uint256,uint160))"));
 
@@ -27,7 +29,9 @@ contract MarketRegistryV1 is IMarketRegistryV1 {
     error EmptyCodeHash(address target);
     error CodeHashMismatch(address target, bytes32 expected, bytes32 actual);
     error TokenDecimalsMismatch(address token, uint8 expected, uint8 actual);
+    error UnsupportedTokenDecimals(address token, uint8 decimals);
     error PriceFeedDecimalsMismatch(address priceFeed, uint8 expected, uint8 actual);
+    error UnsupportedPriceFeedDecimals(address priceFeed, uint8 decimals);
     error PriceFeedDescriptionMismatch(address priceFeed, bytes32 expected, bytes32 actual);
     error PriceFeedVersionMismatch(address priceFeed, uint256 expected, uint256 actual);
     error PoolTokenMismatch(bytes32 marketId, address token0, address token1);
@@ -133,9 +137,15 @@ contract MarketRegistryV1 is IMarketRegistryV1 {
     function _registerAsset(VaultTypes.AssetConfig memory asset) private {
         if (
             asset.assetId == bytes32(0) || asset.token == address(0) || asset.usdPriceFeed == address(0)
-                || asset.priceFeedDescriptionHash == bytes32(0) || asset.priceFeedVersion == 0
+                || asset.priceFeedDescriptionHash == bytes32(0) || asset.priceFeedVersion == 0 || asset.priceMaxAge == 0
         ) revert InvalidAsset(asset.assetId);
         if (_assets[asset.assetId].assetId != bytes32(0)) revert DuplicateAsset(asset.assetId);
+        if (asset.tokenDecimals > MAX_SUPPORTED_DECIMALS) {
+            revert UnsupportedTokenDecimals(asset.token, asset.tokenDecimals);
+        }
+        if (asset.priceFeedDecimals > MAX_SUPPORTED_DECIMALS) {
+            revert UnsupportedPriceFeedDecimals(asset.usdPriceFeed, asset.priceFeedDecimals);
+        }
         for (uint256 i = 0; i < _assetIds.length; ++i) {
             VaultTypes.AssetConfig storage registered = _assets[_assetIds[i]];
             if (registered.token == asset.token) revert DuplicateToken(asset.token);

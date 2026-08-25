@@ -32,7 +32,7 @@ and adversarial tests land in the same change.
 The price-reference prototype reads the accounting and target USD feeds independently. A
 round is usable only when its ID, start time and update time are nonzero, its answer is
 positive, `answeredInRound` is not behind its ID, its start is not after its update, its
-update is not in the future and its age is within an explicit caller-supplied maximum. There
+update is not in the future and its age is within the asset's registry-bound maximum. There
 is no previous-round or single-feed fallback.
 
 Both paper and live execution must use the same integer quote. Feed answers are normalized
@@ -41,13 +41,46 @@ full-precision floor division:
 
 `floor(amountIn * inputPrice18 * 10^outputDecimals / (outputPrice18 * 10^inputDecimals))`
 
-The prototype supports feed decimals up to 18 and token-decimal gaps up to 18. Registry
-identity checks and runtime feed-decimal checks must agree.
+V1 supports feed and token decimals up to 18. Registry identity checks and runtime decimal
+checks must agree. V1 stores an inclusive maximum round age in each registry asset: 1,500
+seconds for cbBTC/USD and ETH/USD, and 90,000 seconds
+for USDC/USD, AERO/USD and EURC/USD. These are the catalog heartbeat plus a fixed delivery
+allowance of five minutes or one hour respectively. They are immutable registry policy, not
+executor input. A catalog or feed-policy change requires a reviewed registry version.
 
-Entry and exit use the same function with the asset order reversed. The prototype does not
-define slippage, router limits or an executable vault path.
-Before that path can exist, one release must freeze per-feed maximum ages and the Base
-sequencer uptime feed, recovery grace period and failure behavior.
+Entry and exit use the same function with the asset order reversed. `maxSlippageBps` means
+the same minimum-output fraction in both directions. The minimum allowed output is the
+ceiling of the floor-rounded reference output multiplied by
+`(10_000 - maxSlippageBps) / 10_000`; executor calldata may only make it stricter. The
+converter rejects `maxSlippageBps >= 10_000`. The final immutable maximum below that value
+remains open until route fee and notional-impact vectors are measured.
+
+Slipstream's Q64.96 price is the square root of raw token1 units per raw token0 unit. The
+oracle ratio therefore includes both token decimal scales. Executable code must derive
+token0, token1 and `zeroForOne` from the registry-bound pool and planned input token, never
+executor-supplied ordering or direction. For token0 to token1, the lower price ratio
+multiplies by `(10_000 - maxSlippageBps) / 10_000`; its square-root limit rounds up. For
+token1 to token0, the upper price ratio multiplies by
+`10_000 / (10_000 - maxSlippageBps)`; its square-root limit rounds down. This reciprocal is
+required for the same output-side bound in both directions. A pool already at or beyond the
+relevant oracle limit fails before the router call. Every intermediate
+rational-to-fixed-point division uses full-precision arithmetic and rounds in the same
+conservative direction as the final integer square root. The result must lie strictly inside
+Slipstream's `(MIN_SQRT_RATIO, MAX_SQRT_RATIO)` interval.
+
+The converter materializes ratios below one at Q192. Ratios at or above one use Q128 before
+the square root and a Q32 rescale, keeping the intermediate quotient within 256 bits. Both
+paths round every step toward the stricter limit; fuzz properties compare the squared result
+against the original rational bound.
+
+Reaching a Slipstream price limit may leave exact input unspent; the limit bounds the
+marginal pool-price path but does not guarantee realized output after fees. The router
+therefore receives a nonzero limit and the independently checked minimum output. A partial
+result below that minimum reverts the entire transaction.
+
+The converter remains non-executable but now has unit, fuzz and pinned Base-fork vectors for
+both token address orderings. The Base sequencer recovery grace period, maximum allowed
+mandate slippage and bounded exit escalation remain open.
 
 The sequencer-guard prototype uses the one Base uptime proxy pinned by the candidate
 manifest. It accepts only a complete non-future round with zero feed decimals and answer
@@ -79,11 +112,13 @@ spacing, pool factory identity, the factory's pool lookup and the router's facto
 The registry contract version also pins the one typed `exactInputSingle` ABI selector. The
 candidate manifest separately pins the quoter, pool implementation, fee module and
 explicit-block fee and observation snapshots through two
-independent RPCs. Manifest schema v3 also pins one Chainlink Standard proxy per supported
+independent RPCs. Manifest schema v4 also pins one Chainlink Standard proxy per supported
 asset, the shared proxy bytecode, description, decimals, version, underlying aggregator and
 complete round at that same block. It separately pins the Base sequencer uptime proxy,
 underlying aggregator and complete status round. Catalog heartbeat and round state are
-evidence, not a frozen maximum-age or recovery-grace policy.
+evidence. Maximum ages are separately frozen registry policy. V4 additionally pins each
+pool's square-root price and tick for directional price-limit vectors; the recovery grace
+remains open.
 
 Only the proxy address and runtime code hash are chain-immutable identity. Feed description,
 decimals and version are frozen registry policy: any change fails verification and requires

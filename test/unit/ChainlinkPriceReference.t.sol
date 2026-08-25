@@ -11,11 +11,9 @@ contract ChainlinkPriceReferenceHarness {
     function quote(
         uint256 amountIn,
         VaultTypes.AssetConfig memory inputAsset,
-        uint256 inputMaxAge,
-        VaultTypes.AssetConfig memory outputAsset,
-        uint256 outputMaxAge
+        VaultTypes.AssetConfig memory outputAsset
     ) external view returns (uint256) {
-        return ChainlinkPriceReference.quote(amountIn, inputAsset, inputMaxAge, outputAsset, outputMaxAge);
+        return ChainlinkPriceReference.quote(amountIn, inputAsset, outputAsset);
     }
 }
 
@@ -40,9 +38,9 @@ contract ChainlinkPriceReferenceTest is Test {
     }
 
     function testQuotesBothDirectionsWithFloorRounding() public view {
-        uint256 targetAmount = priceReference.quote(1_000e6, usdc, 60, target, 60);
+        uint256 targetAmount = priceReference.quote(1_000e6, usdc, target);
         assertEq(targetAmount, 0.5e18);
-        assertEq(priceReference.quote(targetAmount, target, 60, usdc, 60), 1_000e6);
+        assertEq(priceReference.quote(targetAmount, target, usdc), 1_000e6);
     }
 
     function testHandlesDifferentFeedDecimals() public {
@@ -50,15 +48,15 @@ contract ChainlinkPriceReferenceTest is Test {
         target.priceFeedDecimals = 18;
         targetFeed.setRound(20, 2_000e18, NOW - 20, NOW - 10, 20);
 
-        assertEq(priceReference.quote(1_000e6, usdc, 60, target, 60), 0.5e18);
+        assertEq(priceReference.quote(1_000e6, usdc, target), 0.5e18);
     }
 
     function testFloorRoundingNeverCreatesInputValue() public {
         target.tokenDecimals = 8;
         targetFeed.setRound(20, 6_287_175_751_889, NOW - 20, NOW - 10, 20);
 
-        uint256 targetAmount = priceReference.quote(1_000e6, usdc, 60, target, 60);
-        uint256 returnedUsdc = priceReference.quote(targetAmount, target, 60, usdc, 60);
+        uint256 targetAmount = priceReference.quote(1_000e6, usdc, target);
+        uint256 returnedUsdc = priceReference.quote(targetAmount, target, usdc);
         assertEq(targetAmount, 1_590_539);
         assertLe(returnedUsdc, 1_000e6);
     }
@@ -70,7 +68,7 @@ contract ChainlinkPriceReferenceTest is Test {
                 ChainlinkPriceReference.PriceFeedDecimalsMismatch.selector, address(targetFeed), 8, 9
             )
         );
-        priceReference.quote(1_000e6, usdc, 60, target, 60);
+        priceReference.quote(1_000e6, usdc, target);
     }
 
     function testRejectsUnsupportedDecimals() public {
@@ -79,13 +77,13 @@ contract ChainlinkPriceReferenceTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(ChainlinkPriceReference.UnsupportedFeedDecimals.selector, address(targetFeed), 19)
         );
-        priceReference.quote(1_000e6, usdc, 60, target, 60);
+        priceReference.quote(1_000e6, usdc, target);
     }
 
     function testRejectsUnsupportedTokenDecimalDelta() public {
         target.tokenDecimals = 25;
         vm.expectRevert(abi.encodeWithSelector(ChainlinkPriceReference.UnsupportedTokenDecimalDelta.selector, 6, 25));
-        priceReference.quote(1_000e6, usdc, 60, target, 60);
+        priceReference.quote(1_000e6, usdc, target);
     }
 
     function testRejectsInvalidRounds() public {
@@ -103,18 +101,18 @@ contract ChainlinkPriceReferenceTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(ChainlinkPriceReference.FuturePriceRound.selector, address(usdcFeed), NOW + 1)
         );
-        priceReference.quote(1_000e6, usdc, 60, target, 60);
+        priceReference.quote(1_000e6, usdc, target);
 
         usdcFeed.setRound(10, 1e8, NOW - 62, NOW - 61, 10);
         vm.expectRevert(
             abi.encodeWithSelector(ChainlinkPriceReference.StalePriceRound.selector, address(usdcFeed), NOW - 61, 60)
         );
-        priceReference.quote(1_000e6, usdc, 60, target, 60);
+        priceReference.quote(1_000e6, usdc, target);
     }
 
     function testAcceptsRoundAtMaximumAge() public {
         usdcFeed.setRound(10, 1e8, NOW - 61, NOW - 60, 10);
-        assertEq(priceReference.quote(1_000e6, usdc, 60, target, 60), 0.5e18);
+        assertEq(priceReference.quote(1_000e6, usdc, target), 0.5e18);
     }
 
     function testFuzzRoundTripCannotIncreaseInput(uint96 amountIn, uint64 inputPrice, uint64 outputPrice) public {
@@ -122,8 +120,8 @@ contract ChainlinkPriceReferenceTest is Test {
         usdcFeed.setRound(10, int256(uint256(inputPrice)), NOW - 30, NOW - 20, 10);
         targetFeed.setRound(20, int256(uint256(outputPrice)), NOW - 20, NOW - 10, 20);
 
-        uint256 amountOut = priceReference.quote(amountIn, usdc, 60, target, 60);
-        uint256 roundTrip = priceReference.quote(amountOut, target, 60, usdc, 60);
+        uint256 amountOut = priceReference.quote(amountIn, usdc, target);
+        uint256 roundTrip = priceReference.quote(amountOut, target, usdc);
         assertLe(roundTrip, amountIn);
     }
 
@@ -138,6 +136,7 @@ contract ChainlinkPriceReferenceTest is Test {
             usdPriceFeed: address(feed),
             tokenDecimals: tokenDecimals,
             priceFeedDecimals: feedDecimals,
+            priceMaxAge: 60,
             priceFeedVersion: 6,
             tokenCodeHash: bytes32(uint256(1)),
             priceFeedCodeHash: address(feed).codehash,
@@ -154,6 +153,6 @@ contract ChainlinkPriceReferenceTest is Test {
     ) private {
         usdcFeed.setRound(roundId, answer, startedAt, updatedAt, answeredInRound);
         vm.expectRevert(abi.encodeWithSelector(ChainlinkPriceReference.InvalidPriceRound.selector, address(usdcFeed)));
-        priceReference.quote(1_000e6, usdc, 60, target, 60);
+        priceReference.quote(1_000e6, usdc, target);
     }
 }

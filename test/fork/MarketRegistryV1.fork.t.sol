@@ -6,26 +6,61 @@ import {Test} from "forge-std/Test.sol";
 import {MarketRegistryV1} from "../../src/MarketRegistryV1.sol";
 import {ChainlinkPriceReference} from "../../src/libraries/ChainlinkPriceReference.sol";
 import {ChainlinkSequencerGuard} from "../../src/libraries/ChainlinkSequencerGuard.sol";
+import {SlipstreamPriceGuard} from "../../src/libraries/SlipstreamPriceGuard.sol";
 import {VaultTypes} from "../../src/libraries/VaultTypes.sol";
+
+interface ISlipstreamPoolState {
+    function slot0()
+        external
+        view
+        returns (
+            uint160 sqrtPriceX96,
+            int24 tick,
+            uint16 observationIndex,
+            uint16 observationCardinality,
+            uint16 observationCardinalityNext,
+            bool unlocked
+        );
+}
 
 contract ForkProtectionHarness {
     function quote(
         uint256 amountIn,
         VaultTypes.AssetConfig memory inputAsset,
-        uint256 inputMaxAge,
-        VaultTypes.AssetConfig memory outputAsset,
-        uint256 outputMaxAge
+        VaultTypes.AssetConfig memory outputAsset
     ) external view returns (uint256) {
-        return ChainlinkPriceReference.quote(amountIn, inputAsset, inputMaxAge, outputAsset, outputMaxAge);
+        return ChainlinkPriceReference.quote(amountIn, inputAsset, outputAsset);
     }
 
     function requireSequencerUp(address feed, uint256 gracePeriod) external view {
         ChainlinkSequencerGuard.requireUp(feed, gracePeriod);
     }
+
+    function sqrtPriceLimitX96(
+        VaultTypes.AssetConfig memory token0,
+        VaultTypes.AssetConfig memory token1,
+        uint16 maxSlippageBps,
+        bool zeroForOne
+    ) external view returns (uint160) {
+        return SlipstreamPriceGuard.sqrtPriceLimitX96(
+            ChainlinkPriceReference.readNormalizedPrice(token0),
+            token0.tokenDecimals,
+            ChainlinkPriceReference.readNormalizedPrice(token1),
+            token1.tokenDecimals,
+            maxSlippageBps,
+            zeroForOne
+        );
+    }
+
+    function requireCurrentPriceWithinLimit(uint160 current, uint160 limit, bool zeroForOne) external pure {
+        SlipstreamPriceGuard.requireCurrentPriceWithinLimit(current, limit, zeroForOne);
+    }
 }
 
 contract MarketRegistryV1ForkTest is Test {
     string private constant MANIFEST_PATH = "registry/base-mainnet-v1.candidate.json";
+    uint16 private constant VECTOR_SLIPPAGE_BPS = 100;
+    uint256 private constant VECTOR_SEQUENCER_GRACE = 3_600;
 
     function testForkCandidateManifestBuildsRegistryAndMatchesProtectionVectors() public {
         string memory rpcUrl = vm.envOr("BASE_FORK_RPC_URL", string(""));
@@ -70,7 +105,7 @@ contract MarketRegistryV1ForkTest is Test {
             assertEq(registry.marketIdAt(i), markets[i].marketId);
         }
 
-        _assertPriceVectors(manifest, registry, markets, accountingAssetKey);
+        _assertPriceVectors(manifest, registry, markets);
     }
 
     function _readAsset(string memory manifest, string memory symbol)
@@ -86,6 +121,7 @@ contract MarketRegistryV1ForkTest is Test {
             usdPriceFeed: vm.parseJsonAddress(manifest, string.concat(feedRoot, ".proxy.address")),
             tokenDecimals: uint8(vm.parseJsonUint(manifest, string.concat(tokenRoot, ".decimals"))),
             priceFeedDecimals: uint8(vm.parseJsonUint(manifest, string.concat(feedRoot, ".decimals"))),
+            priceMaxAge: uint32(vm.parseJsonUint(manifest, string.concat(feedRoot, ".maxAgeSeconds"))),
             priceFeedVersion: vm.parseJsonUint(manifest, string.concat(feedRoot, ".version")),
             tokenCodeHash: vm.parseJsonBytes32(manifest, string.concat(tokenRoot, ".codeHash")),
             priceFeedCodeHash: vm.parseJsonBytes32(manifest, string.concat(feedRoot, ".proxy.codeHash")),
@@ -115,30 +151,47 @@ contract MarketRegistryV1ForkTest is Test {
     function _assertPriceVectors(
         string memory manifest,
         MarketRegistryV1 registry,
-        VaultTypes.MarketConfig[] memory markets,
-        string memory accountingAssetKey
+        VaultTypes.MarketConfig[] memory markets
     ) private {
         ForkProtectionHarness protection = new ForkProtectionHarness();
-        protection.requireSequencerUp(vm.parseJsonAddress(manifest, ".sequencerUptimeFeed.proxy.address"), 3_600);
+        protection.requireSequencerUp(
+            vm.parseJsonAddress(manifest, ".sequencerUptimeFeed.proxy.address"), VECTOR_SEQUENCER_GRACE
+        );
         VaultTypes.AssetConfig memory accountingAsset = registry.getAsset(registry.accountingAssetId());
-        uint256 accountingMaxAge =
-            vm.parseJsonUint(manifest, string.concat(".priceFeeds.", accountingAssetKey, ".catalogHeartbeatSeconds"));
-
         for (uint256 i = 0; i < markets.length; ++i) {
-            string memory marketRoot = string.concat(".markets[", vm.toString(i), "]");
-            string memory targetSymbol = vm.parseJsonString(manifest, string.concat(marketRoot, ".target"));
-            uint256 targetMaxAge =
-                vm.parseJsonUint(manifest, string.concat(".priceFeeds.", targetSymbol, ".catalogHeartbeatSeconds"));
-            VaultTypes.AssetConfig memory targetAsset = registry.getAsset(markets[i].targetAssetId);
-
-            uint256 targetAmount =
-                protection.quote(1_000e6, accountingAsset, accountingMaxAge, targetAsset, targetMaxAge);
-            assertEq(targetAmount, _expectedTargetAmount(markets[i].targetAssetId));
-            assertEq(
-                protection.quote(targetAmount, targetAsset, targetMaxAge, accountingAsset, accountingMaxAge),
-                _expectedReturnedUsdc(markets[i].targetAssetId)
-            );
+            _assertMarketVectors(manifest, registry, accountingAsset, markets[i], protection, i);
         }
+    }
+
+    function _assertMarketVectors(
+        string memory manifest,
+        MarketRegistryV1 registry,
+        VaultTypes.AssetConfig memory accountingAsset,
+        VaultTypes.MarketConfig memory market,
+        ForkProtectionHarness protection,
+        uint256 marketIndex
+    ) private view {
+        VaultTypes.AssetConfig memory targetAsset = registry.getAsset(market.targetAssetId);
+        uint256 targetAmount = protection.quote(1_000e6, accountingAsset, targetAsset);
+        assertEq(targetAmount, _expectedTargetAmount(market.targetAssetId));
+        assertEq(
+            protection.quote(targetAmount, targetAsset, accountingAsset), _expectedReturnedUsdc(market.targetAssetId)
+        );
+
+        (uint160 currentSqrtPriceX96, int24 currentTick,,,,) = ISlipstreamPoolState(market.pool).slot0();
+        string memory marketRoot = string.concat(".markets[", vm.toString(marketIndex), "].mutableSnapshot");
+        assertEq(currentSqrtPriceX96, vm.parseJsonUint(manifest, string.concat(marketRoot, ".sqrtPriceX96")));
+        assertEq(currentTick, vm.parseJsonInt(manifest, string.concat(marketRoot, ".tick")));
+
+        bool entryZeroForOne = accountingAsset.token < targetAsset.token;
+        (VaultTypes.AssetConfig memory token0, VaultTypes.AssetConfig memory token1) =
+            entryZeroForOne ? (accountingAsset, targetAsset) : (targetAsset, accountingAsset);
+        uint160 entryLimit = protection.sqrtPriceLimitX96(token0, token1, VECTOR_SLIPPAGE_BPS, entryZeroForOne);
+        uint160 exitLimit = protection.sqrtPriceLimitX96(token0, token1, VECTOR_SLIPPAGE_BPS, !entryZeroForOne);
+        protection.requireCurrentPriceWithinLimit(currentSqrtPriceX96, entryLimit, entryZeroForOne);
+        protection.requireCurrentPriceWithinLimit(currentSqrtPriceX96, exitLimit, !entryZeroForOne);
+        assertEq(entryLimit, _expectedEntryLimit(market.targetAssetId));
+        assertEq(exitLimit, _expectedExitLimit(market.targetAssetId));
     }
 
     function _expectedTargetAmount(bytes32 targetAssetId) private pure returns (uint256) {
@@ -155,6 +208,22 @@ contract MarketRegistryV1ForkTest is Test {
             targetAssetId == keccak256("WETH") || targetAssetId == keccak256("AERO")
                 || targetAssetId == keccak256("EURC")
         ) return 999_999_999;
+        revert("unknown target");
+    }
+
+    function _expectedEntryLimit(bytes32 targetAssetId) private pure returns (uint160) {
+        if (targetAssetId == keccak256("cbBTC")) return 3_143_707_547_979_681_810_455_370_500;
+        if (targetAssetId == keccak256("WETH")) return 3_450_288_033_517_193_855_727_111;
+        if (targetAssetId == keccak256("AERO")) return 124_621_490_350_542_697_062_429_537_865_826_304;
+        if (targetAssetId == keccak256("EURC")) return 85_625_435_833_776_395_409_571_184_640;
+        revert("unknown target");
+    }
+
+    function _expectedExitLimit(bytes32 targetAssetId) private pure returns (uint160) {
+        if (targetAssetId == keccak256("cbBTC")) return 3_175_462_169_676_446_273_187_242_928;
+        if (targetAssetId == keccak256("WETH")) return 3_415_785_153_182_021_917_169_841;
+        if (targetAssetId == keccak256("AERO")) return 125_880_293_283_376_461_679_221_749_302_951_936;
+        if (targetAssetId == keccak256("EURC")) return 84_769_181_475_438_631_460_414_685_184;
         revert("unknown target");
     }
 }

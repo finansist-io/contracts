@@ -69,9 +69,9 @@ test("an active label cannot be inferred from candidate evidence", () => {
   assert.throws(() => validateManifest(changed), /only candidate manifests/);
 });
 
-test("schema v2 is rejected after the sequencer cutover", () => {
+test("schema v3 is rejected after the price-policy cutover", () => {
   const changed = structuredClone(manifest);
-  changed.schemaVersion = 2;
+  changed.schemaVersion = 3;
 
   assert.throws(() => validateManifest(changed), /unsupported manifest schema/);
 });
@@ -96,6 +96,38 @@ test("every token has one standard feed and provider provenance has no RPC URL",
   for (const provider of manifest.verificationProviders) {
     assert.deepEqual(Object.keys(provider).sort(), ["id", "operator"]);
   }
+});
+
+test("manifest rejects decimals unsupported by price protection", () => {
+  const invalidToken = structuredClone(manifest);
+  invalidToken.tokens.WETH.decimals = 19;
+  assert.throws(() => validateManifest(invalidToken), /invalid decimals/);
+
+  const invalidFeed = structuredClone(manifest);
+  invalidFeed.priceFeeds.WETH.decimals = 19;
+  assert.throws(() => validateManifest(invalidFeed), /invalid feed decimals/);
+});
+
+test("candidate maximum ages are explicit registry policy", () => {
+  assert.equal(manifest.priceFeeds.USDC.maxAgeSeconds, 90_000);
+  assert.equal(manifest.priceFeeds.cbBTC.maxAgeSeconds, 1_500);
+  assert.equal(manifest.priceFeeds.WETH.maxAgeSeconds, 1_500);
+  assert.equal(manifest.priceFeeds.AERO.maxAgeSeconds, 90_000);
+  assert.equal(manifest.priceFeeds.EURC.maxAgeSeconds, 90_000);
+
+  const invalid = structuredClone(manifest);
+  invalid.priceFeeds.WETH.maxAgeSeconds = 1_501;
+  assert.throws(() => validateManifest(invalid), /invalid maximum age/);
+});
+
+test("slot0 price and tick are required fork evidence", () => {
+  const invalidPrice = structuredClone(manifest);
+  invalidPrice.markets[0].mutableSnapshot.sqrtPriceX96 = "0";
+  assert.throws(() => validateManifest(invalidPrice), /invalid sqrt price snapshot/);
+
+  const invalidTick = structuredClone(manifest);
+  invalidTick.markets[0].mutableSnapshot.tick = 887_273;
+  assert.throws(() => validateManifest(invalidTick), /invalid tick snapshot/);
 });
 
 test("stale or incomplete feed evidence is rejected", () => {

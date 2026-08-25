@@ -5,6 +5,10 @@ import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 const RPC_REQUEST_INTERVAL_MS = 500;
+const DELIVERY_ALLOWANCE_BY_HEARTBEAT = new Map([
+  [1_200, 300],
+  [86_400, 3_600]
+]);
 
 const EXACT_INPUT_SINGLE_SELECTOR = functionSelector(
   "exactInputSingle((address,address,int24,address,uint256,uint256,uint256,uint160))"
@@ -118,6 +122,8 @@ function decodeSlot0(value) {
   const words = value.slice(2).match(/.{64}/g) ?? [];
   invariant(words.length >= 5, `invalid slot0 result: ${value}`);
   return {
+    sqrtPriceX96: BigInt(`0x${words[0]}`).toString(),
+    tick: Number(decodeSignedWord(words[1])),
     observationCardinality: Number(BigInt(`0x${words[3]}`)),
     observationCardinalityNext: Number(BigInt(`0x${words[4]}`))
   };
@@ -160,7 +166,7 @@ function firstDifference(expected, actual, path = "snapshot") {
 }
 
 export function validateManifest(manifest) {
-  invariant(manifest.schemaVersion === 3, "unsupported manifest schema");
+  invariant(manifest.schemaVersion === 4, "unsupported manifest schema");
   invariant(manifest.status === "candidate", "only candidate manifests can be verified");
   invariant(textHash(manifest.registryId) === normalizeHash(manifest.registryIdHash), "wrong registry id hash");
   invariant(Number.isSafeInteger(manifest.chainId) && manifest.chainId > 0, "invalid chain id");
@@ -190,6 +196,14 @@ export function validateManifest(manifest) {
     manifest.sources?.chainlink?.sequencerDocumentationPath === "src/content/data-feeds/l2-sequencer-feeds.mdx",
     "invalid sequencer documentation path"
   );
+  invariant(
+    /^[0-9a-f]{40}$/.test(manifest.sources?.chainlink?.freshnessDocumentationCommit ?? ""),
+    "invalid freshness documentation commit"
+  );
+  invariant(
+    manifest.sources?.chainlink?.freshnessDocumentationPath === "src/content/data-feeds/index.mdx",
+    "invalid freshness documentation path"
+  );
   invariant(Array.isArray(manifest.verificationProviders) && manifest.verificationProviders.length === 2, "two providers required");
   for (const provider of manifest.verificationProviders) {
     invariant(/^[a-z0-9-]+$/.test(provider.id), "invalid verification provider id");
@@ -205,7 +219,7 @@ export function validateManifest(manifest) {
     invariant(symbol.length > 0, "empty token symbol");
     normalizeAddress(token.address);
     normalizeHash(token.codeHash);
-    invariant(Number.isInteger(token.decimals) && token.decimals >= 0 && token.decimals <= 255, "invalid decimals");
+    invariant(Number.isInteger(token.decimals) && token.decimals >= 0 && token.decimals <= 18, "invalid decimals");
   }
   invariant(
     typeof manifest.accountingAsset === "string" && manifest.tokens[manifest.accountingAsset],
@@ -225,10 +239,15 @@ export function validateManifest(manifest) {
       Number.isSafeInteger(feed.catalogHeartbeatSeconds) && feed.catalogHeartbeatSeconds > 0,
       `invalid catalog heartbeat: ${symbol}`
     );
+    const deliveryAllowance = DELIVERY_ALLOWANCE_BY_HEARTBEAT.get(feed.catalogHeartbeatSeconds);
+    invariant(
+      deliveryAllowance !== undefined && feed.maxAgeSeconds === feed.catalogHeartbeatSeconds + deliveryAllowance,
+      `invalid maximum age: ${symbol}`
+    );
     normalizeAddress(feed.proxy.address);
     normalizeHash(feed.proxy.codeHash);
     invariant(textHash(feed.description) === normalizeHash(feed.descriptionHash), `wrong description hash: ${symbol}`);
-    invariant(Number.isInteger(feed.decimals) && feed.decimals > 0 && feed.decimals <= 255, `invalid feed decimals: ${symbol}`);
+    invariant(Number.isInteger(feed.decimals) && feed.decimals > 0 && feed.decimals <= 18, `invalid feed decimals: ${symbol}`);
     invariant(Number.isSafeInteger(feed.version) && feed.version > 0, `invalid feed version: ${symbol}`);
     normalizeAddress(feed.mutableSnapshot.aggregator.address);
     normalizeHash(feed.mutableSnapshot.aggregator.codeHash);
@@ -300,6 +319,18 @@ export function validateManifest(manifest) {
     normalizeAddress(market.pool.token1);
     invariant(Number.isInteger(market.pool.tickSpacing) && market.pool.tickSpacing > 0, "invalid tick spacing");
     invariant(Number.isInteger(market.mutableSnapshot?.feePips), "invalid fee snapshot");
+    const sqrtPriceX96 = canonicalUint(market.mutableSnapshot?.sqrtPriceX96, "sqrt price snapshot");
+    invariant(
+      sqrtPriceX96 > 4_295_128_739n
+        && sqrtPriceX96 < 1_461_446_703_485_210_103_287_273_052_203_988_822_378_723_970_342n,
+      "invalid sqrt price snapshot"
+    );
+    invariant(
+      Number.isInteger(market.mutableSnapshot?.tick)
+        && market.mutableSnapshot.tick >= -887_272
+        && market.mutableSnapshot.tick <= 887_272,
+      "invalid tick snapshot"
+    );
     invariant(Number.isInteger(market.mutableSnapshot?.observationCardinality), "invalid observation snapshot");
     invariant(Number.isInteger(market.mutableSnapshot?.observationCardinalityNext), "invalid observation snapshot");
     invariant(market.mutableSnapshot.feePips >= 0 && market.mutableSnapshot.feePips <= 1_000_000, "invalid fee snapshot");

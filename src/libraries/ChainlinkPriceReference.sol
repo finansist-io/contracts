@@ -20,12 +20,10 @@ library ChainlinkPriceReference {
     function quote(
         uint256 amountIn,
         VaultTypes.AssetConfig memory inputAsset,
-        uint256 inputMaxAge,
-        VaultTypes.AssetConfig memory outputAsset,
-        uint256 outputMaxAge
+        VaultTypes.AssetConfig memory outputAsset
     ) internal view returns (uint256) {
-        uint256 inputPrice = _readNormalizedPrice(inputAsset, inputMaxAge);
-        uint256 outputPrice = _readNormalizedPrice(outputAsset, outputMaxAge);
+        uint256 inputPrice = readNormalizedPrice(inputAsset);
+        uint256 outputPrice = readNormalizedPrice(outputAsset);
 
         if (inputAsset.tokenDecimals == outputAsset.tokenDecimals) {
             return Math.mulDiv(amountIn, inputPrice, outputPrice);
@@ -44,7 +42,7 @@ library ChainlinkPriceReference {
         return Math.mulDiv(amountIn, inputPrice, scaledOutputPrice);
     }
 
-    function _readNormalizedPrice(VaultTypes.AssetConfig memory asset, uint256 maxAge) private view returns (uint256) {
+    function readNormalizedPrice(VaultTypes.AssetConfig memory asset) internal view returns (uint256) {
         IChainlinkAggregatorV3 priceFeed = IChainlinkAggregatorV3(asset.usdPriceFeed);
         uint8 actualDecimals = priceFeed.decimals();
         if (actualDecimals != asset.priceFeedDecimals) {
@@ -61,8 +59,8 @@ library ChainlinkPriceReference {
                 || startedAt > updatedAt
         ) revert InvalidPriceRound(asset.usdPriceFeed);
         if (updatedAt > block.timestamp) revert FuturePriceRound(asset.usdPriceFeed, updatedAt);
-        if (block.timestamp - updatedAt > maxAge) {
-            revert StalePriceRound(asset.usdPriceFeed, updatedAt, maxAge);
+        if (block.timestamp - updatedAt > asset.priceMaxAge) {
+            revert StalePriceRound(asset.usdPriceFeed, updatedAt, asset.priceMaxAge);
         }
 
         uint256 scale = 10 ** (NORMALIZED_PRICE_DECIMALS - actualDecimals);

@@ -29,6 +29,7 @@ contract MarketRegistryV1Test is TestSetup {
         assertEq(storedAsset.tokenDecimals, 18);
         assertEq(storedAsset.tokenCodeHash, address(target).codehash);
         assertEq(storedAsset.usdPriceFeed, address(targetPriceFeed));
+        assertEq(storedAsset.priceMaxAge, 60);
         assertEq(storedAsset.priceFeedDescriptionHash, keccak256("ETH / USD"));
         assertEq(stored.targetAssetId, TARGET_ASSET_ID);
         assertEq(stored.router, address(router));
@@ -93,6 +94,11 @@ contract MarketRegistryV1Test is TestSetup {
         assets[1].priceFeedVersion = 0;
         vm.expectRevert(abi.encodeWithSelector(MarketRegistryV1.InvalidAsset.selector, TARGET_ASSET_ID));
         _deployWithAssets(keccak256("zero-feed-version"), assets, _singleMarket());
+
+        assets = _assets();
+        assets[1].priceMaxAge = 0;
+        vm.expectRevert(abi.encodeWithSelector(MarketRegistryV1.InvalidAsset.selector, TARGET_ASSET_ID));
+        _deployWithAssets(keccak256("zero-feed-max-age"), assets, _singleMarket());
     }
 
     function testRejectsDuplicateAssetId() public {
@@ -166,6 +172,24 @@ contract MarketRegistryV1Test is TestSetup {
             )
         );
         _deployWithAssets(keccak256("wrong-feed-version"), assets, _singleMarket());
+    }
+
+    function testRejectsUnsupportedAssetDecimals() public {
+        VaultTypes.AssetConfig[] memory assets = _assets();
+        assets[1].tokenDecimals = 19;
+        vm.expectRevert(
+            abi.encodeWithSelector(MarketRegistryV1.UnsupportedTokenDecimals.selector, address(target), uint8(19))
+        );
+        _deployWithAssets(keccak256("unsupported-token-decimals"), assets, _singleMarket());
+
+        assets = _assets();
+        assets[1].priceFeedDecimals = 19;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                MarketRegistryV1.UnsupportedPriceFeedDecimals.selector, address(targetPriceFeed), uint8(19)
+            )
+        );
+        _deployWithAssets(keccak256("unsupported-feed-decimals"), assets, _singleMarket());
     }
 
     function testRejectsWrongPriceFeedCodeHash() public {

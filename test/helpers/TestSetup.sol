@@ -180,6 +180,7 @@ abstract contract TestSetup is Test {
             usdPriceFeed: priceFeed,
             tokenDecimals: tokenDecimals,
             priceFeedDecimals: 8,
+            priceMaxAge: 60,
             priceFeedVersion: 6,
             tokenCodeHash: token.codehash,
             priceFeedCodeHash: priceFeed.codehash,

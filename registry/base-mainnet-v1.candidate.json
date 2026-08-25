@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "status": "candidate",
   "marketCount": 5,
   "registryId": "base-mainnet-v1",
@@ -22,6 +22,8 @@
       "networkMappingRepository": "https://github.com/smartcontractkit/documentation",
       "networkMappingCommit": "ec8386ebfde1b16c9aed3e0bb76b214dd2afe82c",
       "networkMappingPath": "src/features/data/chains.ts",
+      "freshnessDocumentationCommit": "ec8386ebfde1b16c9aed3e0bb76b214dd2afe82c",
+      "freshnessDocumentationPath": "src/content/data-feeds/index.mdx",
       "sequencerDocumentationCommit": "0c68dda62f7c33974504a4a815dcc212d54edcb1",
       "sequencerDocumentationPath": "src/content/data-feeds/l2-sequencer-feeds.mdx",
       "variant": "standard"
@@ -72,6 +74,7 @@
     "USDC": {
       "catalogPath": "usdc-usd",
       "catalogHeartbeatSeconds": 86400,
+      "maxAgeSeconds": 90000,
       "proxy": {
         "address": "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B",
         "codeHash": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2"
@@ -96,6 +99,7 @@
     "cbBTC": {
       "catalogPath": "cbbtc-usd",
       "catalogHeartbeatSeconds": 1200,
+      "maxAgeSeconds": 1500,
       "proxy": {
         "address": "0x07DA0E54543a844a80ABE69c8A12F22B3aA59f9D",
         "codeHash": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2"
@@ -120,6 +124,7 @@
     "WETH": {
       "catalogPath": "eth-usd",
       "catalogHeartbeatSeconds": 1200,
+      "maxAgeSeconds": 1500,
       "proxy": {
         "address": "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70",
         "codeHash": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2"
@@ -144,6 +149,7 @@
     "AERO": {
       "catalogPath": "aero-usd",
       "catalogHeartbeatSeconds": 86400,
+      "maxAgeSeconds": 90000,
       "proxy": {
         "address": "0x4EC5970fC728C5f65ba413992CD5fF6FD70fcfF0",
         "codeHash": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2"
@@ -168,6 +174,7 @@
     "EURC": {
       "catalogPath": "eurc-usd",
       "catalogHeartbeatSeconds": 86400,
+      "maxAgeSeconds": 90000,
       "proxy": {
         "address": "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250",
         "codeHash": "0xbd6f524cdc4268b6bd1bb6f77a8821faeea9c52ee9e0afa0b6d948ce82c966c2"
@@ -277,6 +284,8 @@
       },
       "mutableSnapshot": {
         "feePips": 88,
+        "sqrtPriceX96": "3158849830712433104833230843",
+        "tick": -64446,
         "observationCardinality": 900,
         "observationCardinalityNext": 900
       }
@@ -295,6 +304,8 @@
       },
       "mutableSnapshot": {
         "feePips": 394,
+        "sqrtPriceX96": "3434742123396553701851135",
+        "tick": -200933,
         "observationCardinality": 3010,
         "observationCardinalityNext": 3010
       }
@@ -313,6 +324,8 @@
       },
       "mutableSnapshot": {
         "feePips": 500,
+        "sqrtPriceX96": "125180308662483995932109672301197117",
+        "tick": 285472,
         "observationCardinality": 360,
         "observationCardinalityNext": 360
       }
@@ -331,6 +344,8 @@
       },
       "mutableSnapshot": {
         "feePips": 10000,
+        "sqrtPriceX96": "125074485344369157895823497563277646",
+        "tick": 285456,
         "observationCardinality": 200,
         "observationCardinalityNext": 200
       }
@@ -349,6 +364,8 @@
       },
       "mutableSnapshot": {
         "feePips": 73,
+        "sqrtPriceX96": "85207527869989591665414225560",
+        "tick": 1455,
         "observationCardinality": 900,
         "observationCardinalityNext": 900
       }

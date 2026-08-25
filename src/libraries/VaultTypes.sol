@@ -8,6 +8,7 @@ library VaultTypes {
         address usdPriceFeed;
         uint8 tokenDecimals;
         uint8 priceFeedDecimals;
+        uint32 priceMaxAge;
         uint256 priceFeedVersion;
         bytes32 tokenCodeHash;
         bytes32 priceFeedCodeHash;

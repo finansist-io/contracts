@@ -25,6 +25,6 @@ jobs:
           node-version: 20
       - run: forge fmt --check
       - run: forge lint
-      - run: forge build --sizes
-      - run: FOUNDRY_PROFILE=ci forge test
+      - run: forge build --force --sizes
+      - run: FOUNDRY_PROFILE=ci forge test --force
       - run: node --test test/script/*.test.mjs
